@@ -295,22 +295,22 @@ ega_in(uint16_t addr, void *priv)
             break;
 
         case 0x3c0:
-            if (ega_type)
+            if (ega_type == 1)
                 ret = ega->attraddr | ega->attr_palette_enable;
             break;
         case 0x3c1:
-            if (ega_type)
+            if (ega_type == 1)
                 ret = ega->attrregs[ega->attraddr];
             break;
         case 0x3c2:
             ret = (egaswitches & (8 >> egaswitchread)) ? 0x10 : 0x00;
             break;
         case 0x3c4:
-            if (ega_type)
+            if (ega_type == 1)
                 ret = ega->seqaddr;
             break;
         case 0x3c5:
-            if (ega_type)
+            if (ega_type == 1)
                 ret = ega->seqregs[ega->seqaddr & 0xf];
             break;
         case 0x3c6:
@@ -318,24 +318,24 @@ ega_in(uint16_t addr, void *priv)
                 ret = ega->ctl_mode;
             break;
         case 0x3c8:
-            if (ega_type)
+            if (ega_type == 1)
                 ret = 2;
             break;
         case 0x3cc:
-            if (ega_type)
+            if (ega_type == 1)
                 ret = ega->miscout;
             break;
         case 0x3ce:
-            if (ega_type)
+            if (ega_type == 1)
                 ret = ega->gdcaddr;
             break;
         case 0x3cf:
-            if (ega_type)
+            if (ega_type == 1)
                 ret = ega->gdcreg[ega->gdcaddr & 0xf];
             break;
         case 0x3d0:
         case 0x3d4:
-            if (ega_type)
+            if (ega_type == 1)
                 ret = ega->crtcreg;
             break;
         case 0x3d1:
@@ -349,14 +349,21 @@ ega_in(uint16_t addr, void *priv)
                     break;
 
                 case 0x10:
-                case 0x11:
-                    /* TODO: Return light pen address once implemented. */
-                    if (ega_type)
+                    if (ega_type == 1)
                         ret = ega->crtc[ega->crtcreg];
+                    else
+                        ret = ega->light_pen >> 8;
+                    break;
+
+                case 0x11:
+                    if (ega_type == 1)
+                        ret = ega->crtc[ega->crtcreg];
+                    else
+                        ret = ega->light_pen & 0xff;
                     break;
 
                 default:
-                    if (ega_type)
+                    if (ega_type == 1)
                         ret = ega->crtc[ega->crtcreg];
                     break;
             }
@@ -543,20 +550,24 @@ ega_recalctimings(ega_t *ega)
         }
     }
 
-    if (enable_overscan) {
-        overscan_y = (ega->rowcount + 1) << 1;
+    overscan_y = (ega->rowcount + 1) << 1;
 
-        if (overscan_y < 16)
-            overscan_y = 16;
-    }
+    if (overscan_y < 16)
+        overscan_y = 16;
 
     overscan_x = (ega->seqregs[1] & 1) ? 16 : 18;
+
+    if (ega->vres)
+        overscan_y <<= 1;
 
     if (ega->seqregs[1] & 8)
         overscan_x <<= 1;
 
     ega->y_add = (overscan_y >> 1);
-    ega->x_add = (overscan_x >> 1);
+    ega->x_add = (overscan_x >> 1) - ega->scrollcache;
+
+    if (ega->vres)
+        ega->y_add >>= 1;
 
     if (ega->seqregs[1] & 8) {
         disptime    = (double) ((ega->crtc[0] + 2) << 1);
@@ -684,7 +695,7 @@ void
 ega_poll(void *priv)
 {
     ega_t   *ega = (ega_t *) priv;
-    int      x;
+    int      x, y;
     int      old_ma;
     int      wx = 640;
     int      wy = 350;
@@ -704,37 +715,26 @@ ega_poll(void *priv)
                 video_wait_for_buffer();
             }
 
-            if (ega->vres) {
-                old_ma = ega->ma;
-
-                ega->displine <<= 1;
-                ega->y_add <<= 1;
-
+            old_ma = ega->ma;
+            ega->displine *= ega->vres + 1;
+            ega->y_add *= ega->vres + 1;
+            for (y = 0; y <= ega->vres; y++) {
+                /* Render scanline */
                 ega->render(ega);
 
+                /* Render overscan */
                 ega->x_add = (overscan_x >> 1);
                 ega_render_overscan_left(ega);
                 ega_render_overscan_right(ega);
                 ega->x_add = (overscan_x >> 1) - ega->scrollcache;
 
-                ega->displine++;
-
-                ega->ma = old_ma;
-
-                ega->render(ega);
-
-                ega->x_add = (overscan_x >> 1);
-                ega_render_overscan_left(ega);
-                ega_render_overscan_right(ega);
-                ega->x_add = (overscan_x >> 1) - ega->scrollcache;
-
-                ega->y_add >>= 1;
-                ega->displine >>= 1;
-            } else {
-                ega_render_overscan_left(ega);
-                ega->render(ega);
-                ega_render_overscan_right(ega);
+                if (y != ega->vres) {
+                    ega->ma = old_ma;
+                    ega->displine++;
+                }
             }
+            ega->displine /= ega->vres + 1;
+            ega->y_add /= ega->vres + 1;
 
             if (ega->lastline < ega->displine)
                 ega->lastline = ega->displine;
@@ -811,10 +811,6 @@ ega_poll(void *priv)
             ega->cca = ega->ma;
             ega->maback <<= 2;
             ega->sc = 0;
-            if (ega->attrregs[0x10] & 0x20) {
-                ega->scrollcache = 0;
-                ega->x_add       = (overscan_x >> 1);
-            }
         }
         if (ega->vc == ega->dispend) {
             ega->dispon = 0;
@@ -887,16 +883,10 @@ ega_poll(void *priv)
             ega->displine = (ega->interlace && ega->oddeven) ? 1 : 0;
 
             ega->scrollcache = (ega->attrregs[0x13] & 0x0f);
-            if (!(ega->gdcreg[6] & 1) && !(ega->attrregs[0x10] & 1)) { /*Text mode*/
-                if (ega->seqregs[1] & 1)
-                    ega->scrollcache &= 0x07;
-                else {
-                    ega->scrollcache++;
-                    if (ega->scrollcache > 8)
-                        ega->scrollcache = 0;
-                }
-            } else
-                ega->scrollcache &= 0x07;
+            if (ega->scrollcache >= 0x8)
+                ega->scrollcache = 0;
+            else
+                ega->scrollcache++;
 
             if (ega->seqregs[1] & 8)
                 ega->scrollcache <<= 1;
@@ -913,11 +903,12 @@ ega_poll(void *priv)
 void
 ega_doblit(int wx, int wy, ega_t *ega)
 {
-    int       y_add   = enable_overscan ? overscan_y : 0;
+    int       unscaled_overscan_y = ega->vres ? overscan_y >> 1 : overscan_y;
+    int       y_add   = enable_overscan ? unscaled_overscan_y : 0;
     int       x_add   = enable_overscan ? overscan_x : 0;
-    int       y_start = enable_overscan ? 0 : (overscan_y >> 1);
+    int       y_start = enable_overscan ? 0 : (unscaled_overscan_y >> 1);
     int       x_start = enable_overscan ? 0 : (overscan_x >> 1);
-    int       bottom  = (overscan_y >> 1);
+    int       bottom  = (unscaled_overscan_y >> 1);
     uint32_t *p;
     int       i;
     int       j;

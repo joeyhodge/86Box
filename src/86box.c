@@ -30,10 +30,10 @@
 #include <time.h>
 #include <wchar.h>
 #include <stdatomic.h>
+#include <unistd.h>
 
 #ifndef _WIN32
 #    include <pwd.h>
-#    include <unistd.h>
 #endif
 #ifdef __APPLE__
 #    include <string.h>
@@ -1048,6 +1048,7 @@ pc_send_ca(uint16_t sc)
     keyboard_input(1, 0x1D); /* Ctrl key pressed */
     keyboard_input(1, 0x38); /* Alt key pressed */
     keyboard_input(1, sc);
+    usleep(50000);
     keyboard_input(0, sc);
     keyboard_input(0, 0x38); /* Alt key released */
     keyboard_input(0, 0x1D); /* Ctrl key released */
@@ -1230,6 +1231,10 @@ pc_reset_hard_init(void)
         pci_register_cards();
         device_reset_all(DEVICE_PCI);
     }
+
+    /* Mark IDE shadow drives (slaves with a present master) as such in case
+       the IDE controllers present are not some form of PCI. */
+    ide_drives_set_shadow();
 
     /* Reset the CPU module. */
     resetx86();

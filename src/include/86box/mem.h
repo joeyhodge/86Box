@@ -439,6 +439,8 @@ extern void mem_reset_page_blocks(void);
 extern void flushmmucache(void);
 extern void flushmmucache_nopc(void);
 
+extern void mem_debug_check_addr(uint32_t addr, int write);
+
 extern void mem_a20_init(void);
 extern void mem_a20_recalc(void);
 
@@ -446,6 +448,8 @@ extern void mem_init(void);
 extern void mem_close(void);
 extern void mem_reset(void);
 extern void mem_remap_top(int kb);
+
+extern void umc_smram_recalc(uint32_t start, int set);
 
 extern mem_mapping_t *read_mapping[MEM_MAPPINGS_NO];
 extern mem_mapping_t *write_mapping[MEM_MAPPINGS_NO];

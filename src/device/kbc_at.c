@@ -699,7 +699,7 @@ kbc_at_poll(void *priv)
 {
     atkbc_t *dev = (atkbc_t *) priv;
 
-    timer_advance_u64(&dev->kbc_poll_timer, (39ULL * TIMER_USEC));
+    timer_advance_u64(&dev->kbc_poll_timer, (100ULL * TIMER_USEC));
 
     /* TODO: Implement the password security state. */
     kbc_at_do_poll(dev);
@@ -1787,6 +1787,9 @@ kbc_at_process_cmd(void *priv)
                 if (dev->ib == 0xbb)
                     break;
 
+                if (strstr(machine_get_internal_name(), "pb") != NULL)
+                    cpu_override_dynarec = 1;
+
                 if (dev->misc_flags & FLAG_PS2) {
                     set_enable_aux(dev, 1);
                     if ((dev->ports[1] != NULL) && (dev->ports[1]->priv != NULL)) {
@@ -1891,6 +1894,8 @@ kbc_at_read(uint16_t port, void *priv)
                      This also means that in AT mode, the IRQ is level-triggered. */
             if (!(dev->misc_flags & FLAG_PS2))
                 picintclevel(1 << 1, &dev->irq_state);
+            if ((strstr(machine_get_internal_name(), "pb") != NULL) && (cpu_override_dynarec == 1))
+                cpu_override_dynarec = 0;
             break;
 
         case 0x64:
