@@ -351,7 +351,7 @@ chips_69000_do_rop_16bpp(uint16_t *dst, uint16_t src, uint8_t rop)
             *dst |= src;
             break;
         case 0xFF:
-            *dst = 0xFF;
+            *dst = 0xFFFF;
             break;
     }
 }
@@ -405,7 +405,7 @@ chips_69000_do_rop_24bpp(uint32_t *dst, uint32_t src, uint8_t rop)
             *dst |= src;
             break;
         case 0xFF:
-            *dst = 0xFF;
+            *dst = 0xFFFFFF;
             break;
     }
 }
@@ -1886,7 +1886,7 @@ chips_69000_pci_write(int func, int addr, uint8_t val, void *p)
                 }
             case 0x13:
                 {
-                    if (!(chips->pci_conf_status & PCI_COMMAND_MEM)) {
+                    if (!chips->linear_mapping.enable) {
                         chips->linear_mapping.base = val << 24;
                         break;
                     }
