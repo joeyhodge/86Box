@@ -743,6 +743,12 @@ chips_69000_recalctimings(svga_t *svga)
         svga->htotal -= 5;
     }
 
+    if (((chips->ext_regs[0x61] & 0x8) && !(chips->ext_regs[0x61] & 0x4))
+        || ((chips->ext_regs[0x61] & 0x2) && !(chips->ext_regs[0x61] & 0x1))) {
+        svga->dpms = 1;
+    } else
+        svga->dpms = 0;
+
     if (chips->ext_regs[0x09] & 0x1) {
         svga->vtotal -= 2;
         svga->vtotal &= 0xFF;
@@ -881,6 +887,7 @@ chips_69000_process_pixel(chips_69000_t* chips, uint32_t pixel)
     uint32_t dest_pixel = 0;
     uint32_t dest_addr = chips->bitblt_running.bitblt.destination_addr + (chips->bitblt_running.y * chips->bitblt_running.bitblt.destination_span) + (chips->bitblt_running.x * chips->bitblt_running.bytes_per_pixel);
     uint8_t vert_pat_alignment = (chips->bitblt_running.bitblt.bitblt_control >> 20) & 7;
+    uint8_t orig_dest_addr_bit = chips->bitblt_running.bitblt.destination_addr & 1;
 
     switch (chips->bitblt_running.bytes_per_pixel) {
         case 1: /* 8 bits-per-pixel. */
@@ -903,8 +910,9 @@ chips_69000_process_pixel(chips_69000_t* chips, uint32_t pixel)
             }
     }
 
-    /* TODO: Find out from where it actually pulls the exact pattern x and y values. */
-    /* Also: is horizontal pattern alignment a requirement? */
+    if (chips->bitblt_running.bytes_per_pixel == 2) {
+        chips->bitblt_running.bitblt.destination_addr >>= 1;
+    }
     if (chips->bitblt_running.bitblt.bitblt_control & (1 << 18)) {
         uint8_t is_true = 0;
         if (chips->bitblt_running.bitblt.bitblt_control & (1 << 19))
@@ -915,6 +923,10 @@ chips_69000_process_pixel(chips_69000_t* chips, uint32_t pixel)
         is_true = !!(pattern_data & (1 << (7 - ((chips->bitblt_running.bitblt.destination_addr + chips->bitblt_running.x) & 7))));
 
         if (!is_true && (chips->bitblt_running.bitblt.bitblt_control & (1 << 17))) {
+            if (chips->bitblt_running.bytes_per_pixel == 2) {
+                chips->bitblt_running.bitblt.destination_addr <<= 1;
+                chips->bitblt_running.bitblt.destination_addr |= orig_dest_addr_bit;
+            }
             return;
         }
 
@@ -928,9 +940,13 @@ chips_69000_process_pixel(chips_69000_t* chips, uint32_t pixel)
                                                         + (((chips->bitblt_running.bitblt.destination_addr & 7) + chips->bitblt_running.x) & 7), chips);
         }
         if (chips->bitblt_running.bytes_per_pixel == 2) {
-            pattern_pixel = chips_69000_readw_linear(chips->bitblt_running.bitblt.pat_addr
+            pattern_pixel = chips_69000_readb_linear(chips->bitblt_running.bitblt.pat_addr
                                                         + (2 * 8 * ((vert_pat_alignment + chips->bitblt_running.y) & 7))
                                                         + (2 * (((chips->bitblt_running.bitblt.destination_addr & 7) + chips->bitblt_running.x) & 7)), chips);
+
+            pattern_pixel |= chips_69000_readb_linear(chips->bitblt_running.bitblt.pat_addr
+                                                        + (2 * 8 * ((vert_pat_alignment + chips->bitblt_running.y) & 7))
+                                                        + (2 * (((chips->bitblt_running.bitblt.destination_addr & 7) + chips->bitblt_running.x) & 7)) + 1, chips) << 8;
         }
         if (chips->bitblt_running.bytes_per_pixel == 3) {
             pattern_pixel = chips_69000_readb_linear(chips->bitblt_running.bitblt.pat_addr
@@ -945,6 +961,10 @@ chips_69000_process_pixel(chips_69000_t* chips, uint32_t pixel)
                                                         + (4 * 8 * ((vert_pat_alignment + chips->bitblt_running.y) & 7))
                                                         + (3 * (((chips->bitblt_running.bitblt.destination_addr & 7) + chips->bitblt_running.x) & 7)) + 2, chips) << 16;
         }
+    }
+    if (chips->bitblt_running.bytes_per_pixel == 2) {
+        chips->bitblt_running.bitblt.destination_addr <<= 1;
+        chips->bitblt_running.bitblt.destination_addr |= orig_dest_addr_bit;
     }
 
     if (chips->bitblt_running.bitblt.bitblt_control & (1 << 14)) {
@@ -1529,6 +1549,7 @@ chips_69000_write_ext_reg(chips_69000_t* chips, uint8_t val)
             break;
         case 0x61:
             chips->ext_regs[chips->ext_index] = val & 0x7f;
+            svga_recalctimings(&chips->svga);
             break;
         case 0x62:
             chips->ext_regs[chips->ext_index] = val & 0x9C;
@@ -2274,13 +2295,45 @@ chips_69000_vblank_start(svga_t *svga)
 }
 
 static void
+chips_69000_hwcursor_draw_64x64(svga_t *svga, int displine)
+{
+    chips_69000_t    *chips  = (chips_69000_t *) svga->priv;
+    uint64_t          dat[2];
+    int               offset = svga->hwcursor_latch.x - svga->hwcursor_latch.xoff;
+
+    if (svga->interlace && svga->hwcursor_oddeven)
+        svga->hwcursor_latch.addr += 16;
+
+    dat[1] = bswap64(*(uint64_t *) (&svga->vram[svga->hwcursor_latch.addr]));
+    dat[0] = bswap64(*(uint64_t *) (&svga->vram[svga->hwcursor_latch.addr + 8]));
+    svga->hwcursor_latch.addr += 16;
+    
+    for (uint8_t x = 0; x < 64; x++) {
+        if (!(dat[1] & (1ULL << 63)))
+            svga->monitor->target_buffer->line[displine][(offset + svga->x_add) & 2047] = (dat[0] & (1ULL << 63)) ? svga_lookup_lut_ram(svga, chips->cursor_pallook[5]) : svga_lookup_lut_ram(svga, chips->cursor_pallook[4]);
+        else if (dat[0] & (1ULL << 63))
+            svga->monitor->target_buffer->line[displine][(offset + svga->x_add) & 2047] ^= 0xffffff;
+            
+        offset++;
+        dat[0] <<= 1;
+        dat[1] <<= 1;
+    }
+
+    if (svga->interlace && !svga->hwcursor_oddeven)
+        svga->hwcursor_latch.addr += 16;
+}
+
+static void
 chips_69000_hwcursor_draw(svga_t *svga, int displine)
 {
     chips_69000_t    *chips  = (chips_69000_t *) svga->priv;
     uint64_t          dat[2];
     int               offset = svga->hwcursor_latch.x - svga->hwcursor_latch.xoff;
 
-    if (svga->interlace && (chips->ext_regs[0xa0] & 7) == 0b1) {
+    if ((chips->ext_regs[0xa0] & 7) == 0b101)
+        return chips_69000_hwcursor_draw_64x64(svga, displine);
+
+    if (svga->interlace) {
         dat[1] = bswap64(*(uint64_t *) (&svga->vram[svga->hwcursor_latch.addr]));
         dat[0] = bswap64(*(uint64_t *) (&svga->vram[svga->hwcursor_latch.addr + 8]));
         svga->hwcursor_latch.addr += 16;
@@ -2301,10 +2354,7 @@ chips_69000_hwcursor_draw(svga_t *svga, int displine)
         return;
     }
 
-    if (svga->interlace && svga->hwcursor_oddeven)
-        svga->hwcursor_latch.addr += 16;
-
-    if ((svga->hwcursor_on & 1) && (chips->ext_regs[0xa0] & 7) == 0b1) {
+    if ((svga->hwcursor_on & 1)) {
         dat[1] = bswap64(*(uint64_t *) (&svga->vram[svga->hwcursor_latch.addr - 16]));
         dat[0] = bswap64(*(uint64_t *) (&svga->vram[(svga->hwcursor_latch.addr - 16) + 8]));
         dat[1] <<= 32ULL;
@@ -2315,27 +2365,17 @@ chips_69000_hwcursor_draw(svga_t *svga, int displine)
         dat[0] = bswap64(*(uint64_t *) (&svga->vram[svga->hwcursor_latch.addr + 8]));
         svga->hwcursor_latch.addr += 16;
     }
-    switch (chips->ext_regs[0xa0] & 7) {
-        case 0b1:
-        case 0b101:
-            for (uint8_t x = 0; x < (((chips->ext_regs[0xa0] & 7) == 0b1) ? 32 : 64); x++) {
-                if (!(dat[1] & (1ULL << 63)))
-                    svga->monitor->target_buffer->line[displine & 2047][(offset + svga->x_add) & 2047] = (dat[0] & (1ULL << 63)) ? svga_lookup_lut_ram(svga, chips->cursor_pallook[5]) : svga_lookup_lut_ram(svga, chips->cursor_pallook[4]);
-                else if (dat[0] & (1ULL << 63))
-                    svga->monitor->target_buffer->line[displine & 2047][(offset + svga->x_add) & 2047] ^= 0xffffff;
 
-                offset++;
-                dat[0] <<= 1;
-                dat[1] <<= 1;
-            }
-            break;
+    for (uint8_t x = 0; x < 32; x++) {
+        if (!(dat[1] & (1ULL << 63)))
+            svga->monitor->target_buffer->line[displine & 2047][(offset + svga->x_add) & 2047] = (dat[0] & (1ULL << 63)) ? svga_lookup_lut_ram(svga, chips->cursor_pallook[5]) : svga_lookup_lut_ram(svga, chips->cursor_pallook[4]);
+        else if (dat[0] & (1ULL << 63))
+            svga->monitor->target_buffer->line[displine & 2047][(offset + svga->x_add) & 2047] ^= 0xffffff;
 
-        default:
-            break;
+        offset++;
+        dat[0] <<= 1;
+        dat[1] <<= 1;
     }
-
-    if (svga->interlace && !svga->hwcursor_oddeven)
-        svga->hwcursor_latch.addr += 16;
 }
 
 static float
@@ -2356,8 +2396,6 @@ chips_69000_getclock(int clock, void *priv)
     if (chips->ext_regs[0xcb] & 4)
         fvco *= 4.0;
     float fo   = fvco / (float)(1 << pl);
-
-    pclog("freq = %f\n", fo);
 
     return fo;
 }
