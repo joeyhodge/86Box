@@ -399,8 +399,10 @@ machine_at_d824_init(const machine_t *model)
         device_add(&gd5428_onboard_device);
 
     device_add(&keyboard_ps2_device);
-    device_add(&fdc37c651_device);
 
+    device_add(&ide_isa_device);
+    device_add(&fdc37c651_device);
+    
     return ret;
 }
 
@@ -685,7 +687,7 @@ machine_at_pb450_init(const machine_t *model)
 {
     int ret;
 
-    ret = bios_load_linear("roms/machines/pb450/OPTI802.BIN",
+    ret = bios_load_linear("roms/machines/pb450/OPTI802.bin",
                            0x000e0000, 131072, 0);
 
     if (bios_only || !ret)
@@ -1365,7 +1367,7 @@ machine_at_amis76_init(const machine_t *model)
 {
     int ret;
 
-    ret = bios_load_linear_inverted("roms/machines/s76p/s76p.rom", 
+    ret = bios_load_linear_inverted("roms/machines/s76p/S76P.ROM", 
                                     0x000e0000, 131072, 0);
 
     if (bios_only || !ret)
