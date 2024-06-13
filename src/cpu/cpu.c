@@ -29,6 +29,8 @@
 #define HAVE_STDARG_H
 #include <86box/86box.h>
 #include "cpu.h"
+#include "x86.h"
+#include "x87_sf.h"
 #include <86box/device.h>
 #include <86box/machine.h>
 #include <86box/io.h>
@@ -503,7 +505,8 @@ cpu_set(void)
     acycs = 0;
 #endif
 
-    soft_reset_pci = 0;
+    soft_reset_pci    = 0;
+    cpu_init          = 0;
 
     cpu_alt_reset     = 0;
     unmask_a20_in_smm = 0;
