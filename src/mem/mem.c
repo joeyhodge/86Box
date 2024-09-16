@@ -226,6 +226,19 @@ flushmmucache(void)
 }
 
 void
+flushmmucache_pc(void)
+{
+    mmuflush++;
+
+    pccache  = (uint32_t) 0xffffffff;
+    pccache2 = (uint8_t *) 0xffffffff;
+
+#ifdef USE_DYNAREC
+    codegen_flush();
+#endif
+}
+
+void
 flushmmucache_nopc(void)
 {
     for (uint16_t c = 0; c < 256; c++) {
@@ -2557,6 +2570,19 @@ mem_mapping_set_handler(mem_mapping_t *map,
 }
 
 void
+mem_mapping_set_write_handler(mem_mapping_t *map,
+                              void (*write_b)(uint32_t addr, uint8_t val, void *priv),
+                              void (*write_w)(uint32_t addr, uint16_t val, void *priv),
+                              void (*write_l)(uint32_t addr, uint32_t val, void *priv))
+{
+    map->write_b = write_b;
+    map->write_w = write_w;
+    map->write_l = write_l;
+
+    mem_mapping_recalc(map->base, map->size);
+}
+
+void
 mem_mapping_set_addr(mem_mapping_t *map, uint32_t base, uint32_t size)
 {
     /* Remove old mapping. */
@@ -2968,10 +2994,9 @@ umc_smram_recalc(uint32_t start, int set)
 }
 
 void
-mem_remap_top(int kb)
+mem_remap_top_ex(int kb, uint32_t start)
 {
     uint32_t   c;
-    uint32_t   start = (mem_size >= 1024) ? mem_size : 1024;
     int        offset;
     int        size = mem_size - 640;
     int        set        = 1;
@@ -3095,6 +3120,12 @@ mem_remap_top(int kb)
     }
 
     flushmmucache();
+}
+
+void
+mem_remap_top(int kb)
+{
+    mem_remap_top_ex(kb, (mem_size >= 1024) ? mem_size : 1024);
 }
 
 void

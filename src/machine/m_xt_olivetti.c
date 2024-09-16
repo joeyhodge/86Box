@@ -591,7 +591,7 @@ m24_kbd_write(uint16_t port, uint8_t val, void *priv)
                          * bit 7 - use BIOS HD on mainboard (on) / on controller (off)
                          * bit 6 - use OCG/CGA display adapter (on) / other display adapter (off)
                          */
-                        ret = (hdc_current == HDC_INTERNAL) ? 0x00 : 0x80;
+                        ret = (hdc_current[0] == HDC_INTERNAL) ? 0x00 : 0x80;
                         ret |= video_is_cga() ? 0x40 : 0x00;
 
                         m24_kbd_adddata(ret);
@@ -2038,6 +2038,8 @@ m19_vid_init(m19_vid_t *vid)
         vid->ogc.mono_display = 0;
     else
         vid->ogc.mono_display = 1;
+
+    vid->ogc.ctrl_addr = 0x3db;
     /* OGC emulation part end */
 
     /* Plantronics emulation part begin*/
@@ -2219,7 +2221,7 @@ m24_read(uint16_t port, UNUSED(void *priv))
                           "Reserved for HDU", same as for Switch 3 */
 
             /* Switch 3 - Disable internal BIOS HD */
-            if (hdc_current != HDC_INTERNAL)
+            if (hdc_current[0] != HDC_INTERNAL)
                 ret |= 0x4;
 
             /* Switch 2 - Set fast startup */
@@ -2317,7 +2319,7 @@ machine_xt_m24_init(const machine_t *model)
     machine_common_init(model);
 
     /* On-board FDC can be disabled only on M24SP */
-    if (fdc_type == FDC_INTERNAL)
+    if (fdc_current[0] == FDC_INTERNAL)
         device_add(&fdc_xt_device);
 
     /* Address 66-67 = mainboard dip-switch settings */
@@ -2349,7 +2351,7 @@ machine_xt_m24_init(const machine_t *model)
     m24_kbd_init(m24_kbd);
     device_add_ex(&m24_kbd_device, m24_kbd);
 
-    if (hdc_current == HDC_INTERNAL)
+    if (hdc_current[0] == HDC_INTERNAL)
         device_add(&st506_xt_wd1002a_wx1_nobios_device);
 
     return ret;
@@ -2393,7 +2395,7 @@ machine_xt_m240_init(const machine_t *model)
     m24_kbd_init(m24_kbd);
     device_add_ex(&m24_kbd_device, m24_kbd);
 
-    if (fdc_type == FDC_INTERNAL)
+    if (fdc_current[0] == FDC_INTERNAL)
         device_add(&fdc_at_device); /* io.c logs clearly show it using port 3F7 */
 
     if (joystick_type)
@@ -2409,7 +2411,7 @@ machine_xt_m240_init(const machine_t *model)
 
     mm58274_init(nvr, model->nvrmask + 1);
 
-    if (hdc_current == HDC_INTERNAL)
+    if (hdc_current[0] == HDC_INTERNAL)
         device_add(&st506_xt_wd1002a_wx1_nobios_device);
 
     return ret;

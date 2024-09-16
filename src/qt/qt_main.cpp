@@ -138,16 +138,27 @@ main_thread_fn()
             }
         } else {
             /* Just so we dont overload the host OS. */
+
+            /* Trigger a hard reset if one is pending. */
+            if (hard_reset_pending) {
+                hard_reset_pending = 0;
+                pc_reset_hard_close();
+                pc_reset_hard_init();
+            }
+
             if (dopause)
                 ack_pause();
+
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
     }
 
     is_quit = 1;
-    if (gfxcard[1]) {
-        ui_deinit_monitor(1);
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    for (uint8_t i = 1; i < GFXCARD_MAX; i ++) {
+        if (gfxcard[i]) {
+            ui_deinit_monitor(i);
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        }
     }
     QTimer::singleShot(0, QApplication::instance(), []() { QApplication::processEvents(); QApplication::instance()->quit(); });
 }

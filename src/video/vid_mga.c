@@ -6821,11 +6821,13 @@ millennium_ii_available(void)
     return rom_present(ROM_MILLENNIUM_II);
 }
 
+#ifdef USE_G100
 static int
 matrox_g100_available(void)
 {
     return rom_present(ROM_G100);
 }
+#endif
 
 static void
 mystique_speed_changed(void *priv)
@@ -6963,6 +6965,7 @@ const device_t millennium_ii_device = {
     .config        = millennium_ii_config
 };
 
+#ifdef USE_G100
 const device_t productiva_g100_device = {
     .name          = "Matrox Productiva G100",
     .internal_name = "productiva_g100",
@@ -6976,3 +6979,4 @@ const device_t productiva_g100_device = {
     .force_redraw  = mystique_force_redraw,
     .config        = millennium_ii_config
 };
+#endif
