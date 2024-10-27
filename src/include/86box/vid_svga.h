@@ -171,9 +171,11 @@ typedef struct svga_t {
 
     pc_timer_t timer;
     pc_timer_t timer8514;
+    pc_timer_t timer_xga;
 
     double clock;
     double clock8514;
+    double clock_xga;
 
     double multiplier;
 
@@ -319,8 +321,12 @@ extern void     ati8514_pos_write(uint16_t port, uint8_t val, void *priv);
 extern void     ati8514_init(svga_t *svga, void *ext8514, void *dev8514);
 #endif
 
-extern void xga_poll(void *priv, svga_t *svga);
+extern void xga_write_test(uint32_t addr, uint8_t val, void *priv);
+extern uint8_t xga_read_test(uint32_t addr, void *priv);
+extern void xga_poll(void *priv);
 extern void xga_recalctimings(svga_t *svga);
+
+extern uint32_t svga_decode_addr(svga_t *svga, uint32_t addr, int write);
 
 extern int  svga_init(const device_t *info, svga_t *svga, void *priv, int memsize,
                       void (*recalctimings_ex)(struct svga_t *svga),
@@ -363,6 +369,7 @@ uint32_t svga_mask_addr(uint32_t addr, svga_t *svga);
 uint32_t svga_mask_changedaddr(uint32_t addr, svga_t *svga);
 
 void svga_doblit(int wx, int wy, svga_t *svga);
+void svga_poll(void *priv);
 
 enum {
     RAMDAC_6BIT = 0,
@@ -389,6 +396,9 @@ extern uint8_t att49x_ramdac_in(uint16_t addr, int rs2, void *priv, svga_t *svga
 extern void    att498_ramdac_out(uint16_t addr, int rs2, uint8_t val, void *priv, svga_t *svga);
 extern uint8_t att498_ramdac_in(uint16_t addr, int rs2, void *priv, svga_t *svga);
 extern float   av9194_getclock(int clock, void *priv);
+
+extern void    bt481_ramdac_out(uint16_t addr, int rs2, uint8_t val, void *priv, svga_t *svga);
+extern uint8_t bt481_ramdac_in(uint16_t addr, int rs2, void *priv, svga_t *svga);
 
 extern void    bt48x_ramdac_out(uint16_t addr, int rs2, int rs3, uint8_t val, void *priv, svga_t *svga);
 extern uint8_t bt48x_ramdac_in(uint16_t addr, int rs2, int rs3, void *priv, svga_t *svga);
@@ -446,6 +456,7 @@ extern const device_t att491_ramdac_device;
 extern const device_t att492_ramdac_device;
 extern const device_t att498_ramdac_device;
 extern const device_t av9194_device;
+extern const device_t bt481_ramdac_device;
 extern const device_t bt484_ramdac_device;
 extern const device_t att20c504_ramdac_device;
 extern const device_t bt485_ramdac_device;
