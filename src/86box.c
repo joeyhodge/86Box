@@ -103,6 +103,7 @@
 #include <86box/machine_status.h>
 #include <86box/apm.h>
 #include <86box/acpi.h>
+#include <86box/nv/vid_nv_rivatimer.h>
 
 // Disable c99-designator to avoid the warnings about int ng
 #ifdef __clang__
@@ -206,6 +207,7 @@ int      video_fullscreen_scale_maximized       = 0;              /* (C) Whether
                                                                          also apply when maximized. */
 int      do_auto_pause                          = 0;              /* (C) Auto-pause the emulator on focus
                                                                          loss */
+int      hook_enabled                           = 1;              /* (C) Keyboard hook is enabled */
 char     uuid[MAX_UUID_LEN]                     = { '\0' };       /* (C) UUID or machine identifier */
 
 int      other_ide_present = 0;                                   /* IDE controllers from non-IDE cards are
@@ -251,11 +253,35 @@ static volatile atomic_int do_pause_ack = 0;
 static volatile atomic_int pause_ack = 0;
 
 #ifndef RELEASE_BUILD
-static char buff[1024];
-static int  seen = 0;
+
+#define LOG_SIZE_BUFFER 1024            /* Log size buffer */
+
+static char buff[LOG_SIZE_BUFFER];
+
+static int seen = 0;
 
 static int suppr_seen = 1;
+
+// Functions only used in this translation unit
+void pclog_ensure_stdlog_open(void);
 #endif
+
+/* 
+    Ensures STDLOG is open for pclog_ex and pclog_ex_cyclic
+*/
+void pclog_ensure_stdlog_open(void)
+{
+#ifndef RELEASE_BUILD
+    if (stdlog == NULL) {
+        if (log_path[0] != '\0') {
+            stdlog = plat_fopen(log_path, "w");
+            if (stdlog == NULL)
+                stdlog = stdout;
+        } else
+            stdlog = stdout;
+    }
+#endif
+}
 
 /*
  * Log something to the logfile or stdout.
@@ -268,19 +294,12 @@ void
 pclog_ex(const char *fmt, va_list ap)
 {
 #ifndef RELEASE_BUILD
-    char temp[1024];
+    char temp[LOG_SIZE_BUFFER];
 
     if (strcmp(fmt, "") == 0)
         return;
 
-    if (stdlog == NULL) {
-        if (log_path[0] != '\0') {
-            stdlog = plat_fopen(log_path, "w");
-            if (stdlog == NULL)
-                stdlog = stdout;
-        } else
-            stdlog = stdout;
-    }
+    pclog_ensure_stdlog_open();
 
     vsprintf(temp, fmt, ap);
     if (suppr_seen && !strcmp(buff, temp))
@@ -296,6 +315,8 @@ pclog_ex(const char *fmt, va_list ap)
     fflush(stdlog);
 #endif
 }
+
+
 
 void
 pclog_toggle_suppr(void)
@@ -452,6 +473,8 @@ delete_nvr_file(uint8_t flash)
     fn = NULL;
 }
 
+extern void  device_find_all_descs(void);
+
 /*
  * Perform initial startup of the PC.
  *
@@ -561,6 +584,7 @@ usage:
             printf("-S or --settings        - show only the settings dialog\n");
 #endif
             printf("-V or --vmname name     - overrides the name of the running VM\n");
+            printf("-W or --nohook          - disables keyboard hook (compatibility-only outside Windows)\n");
             printf("-X or --clear what      - clears the 'what' (cmos/flash/both)\n");
             printf("-Y or --donothing       - do not show any UI or run the emulation\n");
             printf("-Z or --lastvmpath      - the last parameter is VM path rather than config\n");
@@ -636,6 +660,8 @@ usage:
             dump_missing = 1;
         } else if (!strcasecmp(argv[c], "--donothing") || !strcasecmp(argv[c], "-Y")) {
             do_nothing = 1;
+        } else if (!strcasecmp(argv[c], "--nohook") || !strcasecmp(argv[c], "-W")) {
+            hook_enabled = 0;
         } else if (!strcasecmp(argv[c], "--keycodes") || !strcasecmp(argv[c], "-K")) {
             if ((c + 1) == argc)
                 goto usage;
@@ -1420,6 +1446,9 @@ pc_run(void)
         pc_reset_hard_close();
         pc_reset_hard_init();
     }
+
+    /* Update the guest-CPU independent timer for devices with independent clock speed */
+    rivatimer_update_all();
 
     /* Run a block of code. */
     startblit();

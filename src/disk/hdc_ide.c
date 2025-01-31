@@ -145,7 +145,7 @@ typedef struct mcide_t {
     rom_t bios_rom;
 } mcide_t;
 
-ide_board_t *ide_boards[IDE_BUS_MAX];
+ide_board_t *ide_boards[IDE_BUS_MAX] = { 0 };
 
 static uint8_t ide_ter_pnp_rom[] = {
     /* BOX0001, serial 0, dummy checksum (filled in by isapnp_add_card) */
@@ -486,7 +486,7 @@ ide_get_max(const ide_t *ide, const int type)
     int             ret;
 
     if (ide->type == IDE_ATAPI)
-        ret = ide->get_max(!IDE_ATAPI_IS_EARLY && ata_4, type);
+        ret = ide->get_max(ide, !IDE_ATAPI_IS_EARLY && ata_4, type);
     else
         ret = max[ata_4][type];
 
@@ -501,7 +501,7 @@ ide_get_timings(const ide_t *ide, const int type)
     int             ret;
 
     if (ide->type == IDE_ATAPI)
-        ret = ide->get_timings(!IDE_ATAPI_IS_EARLY && ata_4, type);
+        ret = ide->get_timings(ide, !IDE_ATAPI_IS_EARLY && ata_4, type);
     else
         ret = timings[ata_4][type];
 
@@ -618,9 +618,12 @@ ide_hd_identify(const ide_t *ide)
     if (!ide_boards[ide->board]->force_ata3 && (bm != NULL)) {
         ide->buffer[80] = 0x7e; /*ATA-1 to ATA-6 supported*/
         ide->buffer[81] = 0x19; /*ATA-6 revision 3a supported*/
-    } else {
+    } else
         ide->buffer[80] = 0x0e; /*ATA-1 to ATA-3 supported*/
-    }
+
+    ide->buffer[83] = ide->buffer[84] = 0x4000;
+    ide->buffer[86] = 0x0000;
+    ide->buffer[87] = 0x4000;
 }
 
 static void
@@ -640,7 +643,7 @@ ide_identify(ide_t *ide)
     memset(ide->buffer, 0, 512);
 
     if (ide->type == IDE_ATAPI)
-        ide->identify(ide, !IDE_ATAPI_IS_EARLY && !ide_boards[ide->board]->force_ata3 && (bm != NULL));
+        ide->identify((const ide_t *) ide, !IDE_ATAPI_IS_EARLY && !ide_boards[ide->board]->force_ata3 && (bm != NULL));
     else if (ide->type == IDE_HDD)
         ide_hd_identify(ide);
     else {
@@ -970,7 +973,7 @@ ide_atapi_attach(ide_t *ide)
     ide->type = IDE_ATAPI;
     ide_allocate_buffer(ide);
     ide_set_signature(ide);
-    ide->mdma_mode = (1 << ide->get_max(!IDE_ATAPI_IS_EARLY &&
+    ide->mdma_mode = (1 << ide->get_max((const ide_t *) ide, !IDE_ATAPI_IS_EARLY &&
                       !ide_boards[ide->board]->force_ata3 && (bm != NULL), TYPE_PIO));
     ide->tf->error = 1;
     ide->cfg_spt = ide->cfg_hpc = 0;
@@ -1652,7 +1655,7 @@ ide_writeb(uint16_t addr, uint8_t val, void *priv)
                         ide->sc->callback = 200.0 * IDE_TIME;
 
                     if (ide->type == IDE_HDD) {
-                        ui_sb_update_icon(SB_HDD | hdd[ide->hdd_num].bus, 1);
+                        ui_sb_update_icon(SB_HDD | hdd[ide->hdd_num].bus_type, 1);
                         uint32_t sec_count;
                         double   wait_time;
                         if ((val == WIN_READ_DMA) || (val == WIN_READ_DMA_ALT)) {
@@ -1694,7 +1697,7 @@ ide_writeb(uint16_t addr, uint8_t val, void *priv)
                     ide->blockcount = 0;
                     /* Turn on the activity indicator *here* so that it gets turned on
                        less times. */
-                    ui_sb_update_icon(SB_HDD | hdd[ide->hdd_num].bus, 1);
+                    ui_sb_update_icon(SB_HDD | hdd[ide->hdd_num].bus_type, 1);
                     fallthrough;
 
                 case WIN_WRITE:
@@ -1882,7 +1885,7 @@ ide_read_data(ide_t *ide)
                         ide_set_callback(ide, seek_us + xfer_us);
                     }
                 } else
-                    ui_sb_update_icon(SB_HDD | hdd[ide->hdd_num].bus, 0);
+                    ui_sb_update_icon(SB_HDD | hdd[ide->hdd_num].bus_type, 0);
             }
         }
     }
@@ -2219,9 +2222,8 @@ ide_callback(void *priv)
                     ide->sector_pos      = 0;
                     ret = hdd_image_read(ide->hdd_num, ide_get_sector(ide),
                                          ide->tf->secount ? ide->tf->secount : 256, ide->sector_buffer);
-                } else {
+                } else
                     ret = 0;
-                }
 
                 memcpy(ide->buffer, &ide->sector_buffer[ide->sector_pos * 512], 512);
 
@@ -2236,7 +2238,7 @@ ide_callback(void *priv)
 
                 ide_irq_raise(ide);
 
-                ui_sb_update_icon(SB_HDD | hdd[ide->hdd_num].bus, 1);
+                ui_sb_update_icon(SB_HDD | hdd[ide->hdd_num].bus_type, 1);
             }
             break;
 
@@ -2275,7 +2277,7 @@ ide_callback(void *priv)
                         ide->tf->atastat = DRDY_STAT | DSC_STAT;
 
                         ide_irq_raise(ide);
-                        ui_sb_update_icon(SB_HDD | hdd[ide->hdd_num].bus, 0);
+                        ui_sb_update_icon(SB_HDD | hdd[ide->hdd_num].bus_type, 0);
                     } else {
                         /* Bus master DMAS error, abort the command. */
                         ide_log("IDE %i: DMA read aborted (failed)\n", ide->channel);
@@ -2344,10 +2346,10 @@ ide_callback(void *priv)
                     ide->tf->atastat = DRQ_STAT | DRDY_STAT | DSC_STAT;
                     ide->tf->pos     = 0;
                     ide_next_sector(ide);
-                    ui_sb_update_icon(SB_HDD | hdd[ide->hdd_num].bus, 1);
+                    ui_sb_update_icon(SB_HDD | hdd[ide->hdd_num].bus_type, 1);
                 } else {
                     ide->tf->atastat = DRDY_STAT | DSC_STAT;
-                    ui_sb_update_icon(SB_HDD | hdd[ide->hdd_num].bus, 0);
+                    ui_sb_update_icon(SB_HDD | hdd[ide->hdd_num].bus_type, 0);
                 }
                 if (ret < 0)
                     err = UNC_ERR;
@@ -2389,7 +2391,7 @@ ide_callback(void *priv)
                             err = UNC_ERR;
 
                         ide_irq_raise(ide);
-                        ui_sb_update_icon(SB_HDD | hdd[ide->hdd_num].bus, 0);
+                        ui_sb_update_icon(SB_HDD | hdd[ide->hdd_num].bus_type, 0);
                     } else {
                         /* Bus master DMA error, abort the command. */
                         ide_log("IDE %i: DMA read aborted (failed)\n", ide->channel);
@@ -2427,7 +2429,7 @@ ide_callback(void *priv)
                     ide_next_sector(ide);
                 } else {
                     ide->tf->atastat = DRDY_STAT | DSC_STAT;
-                    ui_sb_update_icon(SB_HDD | hdd[ide->hdd_num].bus, 0);
+                    ui_sb_update_icon(SB_HDD | hdd[ide->hdd_num].bus_type, 0);
                 }
                 if (ret < 0)
                     err = UNC_ERR;
@@ -2444,7 +2446,7 @@ ide_callback(void *priv)
                 ide->tf->pos     = 0;
                 ide->tf->atastat = DRDY_STAT | DSC_STAT;
                 ide_irq_raise(ide);
-                ui_sb_update_icon(SB_HDD | hdd[ide->hdd_num].bus, 1);
+                ui_sb_update_icon(SB_HDD | hdd[ide->hdd_num].bus_type, 1);
             }
             break;
 
@@ -2461,7 +2463,7 @@ ide_callback(void *priv)
                     err = UNC_ERR;
                 ide_irq_raise(ide);
 
-                ui_sb_update_icon(SB_HDD | hdd[ide->hdd_num].bus, 1);
+                ui_sb_update_icon(SB_HDD | hdd[ide->hdd_num].bus_type, 1);
             }
             break;
 
@@ -2757,7 +2759,7 @@ ide_board_setup(const int board)
 
     c = 0;
     for (d = 0; d < HDD_NUM; d++) {
-        const int is_ide   = (hdd[d].bus == HDD_BUS_IDE);
+        const int is_ide   = (hdd[d].bus_type == HDD_BUS_IDE);
         const int ch       = hdd[d].ide_channel;
 
         const int valid_ch = ((ch >= min_ch) && (ch <= max_ch));
