@@ -1721,34 +1721,42 @@ ht216_force_redraw(void *priv)
 // clang-format off
 static const device_config_t v7_vga_1024i_config[] = {
     {
-        .name        = "memory",
-        .description = "Memory size",
-        .type        = CONFIG_SELECTION,
-        .default_int = 512,
-        .selection   = {
-            { .description = "256 KB", .value       = 256 },
-            { .description = "512 KB", .value       = 512 },
-            { .description = ""                           }
-        }
+        .name           = "memory",
+        .description    = "Memory size",
+        .type           = CONFIG_SELECTION,
+        .default_string = NULL,
+        .default_int    = 512,
+        .file_filter    = NULL,
+        .spinner        = { 0 },
+        .selection      = {
+            { .description = "256 KB", .value = 256 },
+            { .description = "512 KB", .value = 512 },
+            { .description = ""                     }
+        },
+        .bios           = { { 0 } }
     },
-    { .type = CONFIG_END }
+    { .name = "", .description = "", .type = CONFIG_END }
 };
 
 static const device_config_t ht216_32_standalone_config[] = {
     {
-        .name        = "monitor_type",
-        .description = "Monitor type",
-        .type        = CONFIG_SELECTION,
-        .default_int = 0x18,
-        .selection   = {
+        .name           = "monitor_type",
+        .description    = "Monitor type",
+        .type           = CONFIG_SELECTION,
+        .default_string = NULL,
+        .default_int    = 0x18,
+        .file_filter    = NULL,
+        .spinner        = { 0 },
+        .selection      = {
             { .description = "Mono Interlaced",      .value = 0x00 },
             { .description = "Mono Non-Interlaced",  .value = 0x08 },
             { .description = "Color Interlaced",     .value = 0x10 },
             { .description = "Color Non-Interlaced", .value = 0x18 },
-            { .description = "" }
-        }
+            { .description = ""                                    }
+        },
+        .bios           = { { 0 } }
     },
-    { .type = CONFIG_END }
+    { .name = "", .description = "", .type = CONFIG_END }
 };
 // clang-format on
 
@@ -1760,7 +1768,7 @@ const device_t g2_gc205_device = {
     .init          = g2_gc205_init,
     .close         = ht216_close,
     .reset         = NULL,
-    { .available = g2_gc205_available },
+    .available     = g2_gc205_available,
     .speed_changed = ht216_speed_changed,
     .force_redraw  = ht216_force_redraw,
     .config        = NULL
@@ -1774,7 +1782,7 @@ const device_t v7_vga_1024i_device = {
     .init          = v7_vga_1024i_init,
     .close         = ht216_close,
     .reset         = NULL,
-    { .available = v7_vga_1024i_available },
+    .available     = v7_vga_1024i_available,
     .speed_changed = ht216_speed_changed,
     .force_redraw  = ht216_force_redraw,
     .config        = v7_vga_1024i_config
@@ -1788,7 +1796,7 @@ const device_t ht216_32_pb410a_device = {
     .init          = ht216_pb410a_init,
     .close         = ht216_close,
     .reset         = NULL,
-    { .available = NULL },
+    .available     = NULL,
     .speed_changed = ht216_speed_changed,
     .force_redraw  = ht216_force_redraw,
     .config        = NULL
@@ -1802,7 +1810,7 @@ const device_t ht216_32_standalone_device = {
     .init          = ht216_standalone_init,
     .close         = ht216_close,
     .reset         = NULL,
-    { .available = ht216_standalone_available },
+    .available     = ht216_standalone_available,
     .speed_changed = ht216_speed_changed,
     .force_redraw  = ht216_force_redraw,
     .config        = ht216_32_standalone_config
@@ -1816,7 +1824,7 @@ const device_t radius_svga_multiview_isa_device = {
     .init          = radius_svga_multiview_init,
     .close         = ht216_close,
     .reset         = NULL,
-    { .available = radius_svga_multiview_available },
+    .available     = radius_svga_multiview_available,
     .speed_changed = ht216_speed_changed,
     .force_redraw  = ht216_force_redraw,
     .config        = NULL
@@ -1830,7 +1838,7 @@ const device_t radius_svga_multiview_mca_device = {
     .init          = radius_svga_multiview_init,
     .close         = ht216_close,
     .reset         = NULL,
-    { .available = radius_svga_multiview_available },
+    .available     = radius_svga_multiview_available,
     .speed_changed = ht216_speed_changed,
     .force_redraw  = ht216_force_redraw,
     .config        = NULL

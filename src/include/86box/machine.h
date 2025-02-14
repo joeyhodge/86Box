@@ -173,20 +173,21 @@ enum {
     MACHINE_TYPE_486        = 8,
     MACHINE_TYPE_486_S2     = 9,
     MACHINE_TYPE_486_S3     = 10,
-    MACHINE_TYPE_486_MISC   = 11,
-    MACHINE_TYPE_SOCKET4    = 12,
-    MACHINE_TYPE_SOCKET5    = 13,
-    MACHINE_TYPE_SOCKET7_3V = 14,
-    MACHINE_TYPE_SOCKET7    = 15,
-    MACHINE_TYPE_SOCKETS7   = 16,
-    MACHINE_TYPE_SOCKET8    = 17,
-    MACHINE_TYPE_SLOT1      = 18,
-    MACHINE_TYPE_SLOT1_2    = 19,
-    MACHINE_TYPE_SLOT1_370  = 20,
-    MACHINE_TYPE_SLOT2      = 21,
-    MACHINE_TYPE_SOCKET370  = 22,
-    MACHINE_TYPE_MISC       = 23,
-    MACHINE_TYPE_MAX        = 24
+    MACHINE_TYPE_486_S3_PCI = 11,
+    MACHINE_TYPE_486_MISC   = 12,
+    MACHINE_TYPE_SOCKET4    = 13,
+    MACHINE_TYPE_SOCKET5    = 14,
+    MACHINE_TYPE_SOCKET7_3V = 15,
+    MACHINE_TYPE_SOCKET7    = 16,
+    MACHINE_TYPE_SOCKETS7   = 17,
+    MACHINE_TYPE_SOCKET8    = 18,
+    MACHINE_TYPE_SLOT1      = 19,
+    MACHINE_TYPE_SLOT1_2    = 20,
+    MACHINE_TYPE_SLOT1_370  = 21,
+    MACHINE_TYPE_SLOT2      = 22,
+    MACHINE_TYPE_SOCKET370  = 23,
+    MACHINE_TYPE_MISC       = 24,
+    MACHINE_TYPE_MAX        = 25
 };
 
 enum {
@@ -320,27 +321,29 @@ typedef struct _machine_ {
     int                    ram_granularity;
     int                    nvrmask;
 #ifdef EMU_DEVICE_H
-    const device_t *kbc_device;
+    const device_t        *kbc_device;
 #else
-    void *kbc_device;
+    void                  *kbc_device;
 #endif /* EMU_DEVICE_H */
-    uint8_t  kbc_p1;
-    uint32_t gpio;
-    uint32_t gpio_acpi;
+    uintptr_t              kbc_params;
+    /* Bits 23-16: XOR mask, bits 15-8: OR mask, bits 7-0: AND mask. */
+    uint32_t               kbc_p1;
+    uint32_t               gpio;
+    uint32_t               gpio_acpi;
 #ifdef EMU_DEVICE_H
-    const device_t *device;
-    const device_t *fdc_device;
-    const device_t *sio_device;
-    const device_t *vid_device;
-    const device_t *snd_device;
-    const device_t *net_device;
+    const device_t        *device;
+    const device_t        *fdc_device;
+    const device_t        *sio_device;
+    const device_t        *vid_device;
+    const device_t        *snd_device;
+    const device_t        *net_device;
 #else
-    void *device;
-    void *fdc_device;
-    void *sio_device;
-    void *vid_device;
-    void *snd_device;
-    void *net_device;
+    void                  *device;
+    void                  *fdc_device;
+    void                  *sio_device;
+    void                  *vid_device;
+    void                  *snd_device;
+    void                  *net_device;
 #endif
 } machine_t;
 
@@ -358,6 +361,7 @@ extern int         machine_available(int m);
 extern const char *machine_getname(void);
 extern const char *machine_getname_ex(int m);
 extern const char *machine_get_internal_name(void);
+extern const char *machine_get_nvr_name(void);
 extern int         machine_get_machine_from_internal_name(const char *s);
 extern void        machine_init(void);
 #ifdef EMU_DEVICE_H
@@ -370,6 +374,7 @@ extern const device_t *machine_get_snd_device(int m);
 extern const device_t *machine_get_net_device(int m);
 #endif
 extern const char *machine_get_internal_name_ex(int m);
+extern const char *machine_get_nvr_name_ex(int m);
 extern int         machine_get_nvrmask(int m);
 extern int         machine_has_flags(int m, int flags);
 extern int         machine_has_bus(int m, int bus_flags);
