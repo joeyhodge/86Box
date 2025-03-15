@@ -107,6 +107,7 @@ extern uint64_t instru_run_ms;
 #define window_y monitor_settings[0].mon_window_y
 #define window_w monitor_settings[0].mon_window_w
 #define window_h monitor_settings[0].mon_window_h
+extern int      inhibit_multimedia_keys;    /* (C) Inhibit multimedia keys on Windows. */
 extern int      window_remember;
 extern int      vid_resize;                 /* (C) allow resizing */
 extern int      invert_display;             /* (C) invert the display */
@@ -126,7 +127,6 @@ extern int      video_filter_method;        /* (C) video */
 extern int      video_vsync;                /* (C) video */
 extern int      video_framerate;            /* (C) video */
 extern int      gfxcard[GFXCARD_MAX];       /* (C) graphics/video card */
-extern char     video_shader[512];          /* (C) video */
 extern int      bugger_enabled;             /* (C) enable ISAbugger */
 extern int      novell_keycard_enabled;     /* (C) enable Novell NetWare 2.x key card emulation. */
 extern int      postcard_enabled;           /* (C) enable POST card */
@@ -187,6 +187,8 @@ extern char uuid[MAX_UUID_LEN]; /* UUID or machine identifier */
 extern FILE *stdlog; /* file to log output to */
 #endif
 extern int config_changed; /* config has changed */
+
+extern __thread int is_cpu_thread; /* Is this the CPU thread? */
 
 /* Function prototypes. */
 #ifdef HAVE_STDARG_H
