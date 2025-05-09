@@ -190,6 +190,7 @@ machine_at_acerv60n_init(const machine_t *model)
     device_add(&piix3_device);
     device_add_params(&fdc37c93x_device, (void *) (FDC37C935 | FDC37C93X_NORMAL));
     device_add(&sst_flash_29ee010_device);
+    spd_register(SPD_TYPE_SDRAM, 0x7, 128);
 
     return ret;
 }
@@ -216,9 +217,7 @@ machine_at_lgibmx61_init(const machine_t *model)
     pci_register_slot(0x0F, PCI_CARD_NORMAL,      4, 1, 2, 3);
     device_add(&i440fx_device);
     device_add(&piix3_device);
-    // device_add(&keyboard_ps2_ami_pci_device);
     device_add(&keyboard_ps2_ami_device);
-    // device_add(&w83787f_device);
     device_add(&w83877f_president_device);
     device_add(&sst_flash_29ee010_device);
 
