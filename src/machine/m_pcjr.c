@@ -782,10 +782,29 @@ static const device_config_t pcjr_config[] = {
         .file_filter = "",
         .spinner = { 0 },
         .selection = {
-            { .description = "RGB",       .value = PCJR_RGB       },
-            { .description = "Composite", .value = PCJR_COMPOSITE },
-            { .description = ""                                   }
+            { .description = "RGB",            .value = PCJR_RGB          },
+            { .description = "Composite",      .value = PCJR_COMPOSITE    },
+            { .description = "RGB (no brown)", .value = PCJR_RGB_NO_BROWN },
+            { .description = "RGB (IBM 5153)", .value = PCJR_RGB_IBM_5153 },
+            { .description = ""                                           }
         }
+    },
+    {
+        .name           = "double_type",
+        .description    = "Line doubling type",
+        .type           = CONFIG_SELECTION,
+        .default_string = NULL,
+        .default_int    = DOUBLE_NONE,
+        .file_filter    = NULL,
+        .spinner        = { 0 },
+        .selection      = {
+            { .description = "None",                 .value = DOUBLE_NONE               },
+            { .description = "Simple doubling",      .value = DOUBLE_SIMPLE             },
+            { .description = "sRGB interpolation",   .value = DOUBLE_INTERPOLATE_SRGB   },
+            { .description = "Linear interpolation", .value = DOUBLE_INTERPOLATE_LINEAR },
+            { .description = ""                                                         }
+        },
+        .bios           = { { 0 } }
     },
     {
         .name = "apply_hd",
@@ -826,6 +845,8 @@ machine_pcjr_init(UNUSED(const machine_t *model))
         return ret;
 
     pcjr = calloc(1, sizeof(pcjr_t));
+
+    is_pcjr = 1;
 
     pic_init_pcjr();
     pit_common_init(0, pit_irq0_timer_pcjr, NULL);

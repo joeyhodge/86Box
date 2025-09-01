@@ -27,9 +27,9 @@
 #include <86box/rom.h>
 #include <86box/io.h>
 #include <86box/timer.h>
+#include <86box/device.h>
 #include <86box/lpt.h>
 #include <86box/pit.h>
-#include <86box/device.h>
 #include <86box/video.h>
 #include <86box/vid_hercules.h>
 #include <86box/plat_unused.h>
@@ -555,6 +555,9 @@ hercules_init(UNUSED(const device_t *info))
         case 3:
             loadfont(FONT_KAMCL16_PATH, 0);
             break;
+        case 4:
+            loadfont(FONT_TULIP_DGA_PATH, 0);
+            break;
     }
 
     timer_add(&dev->timer, hercules_poll, dev, 1);
@@ -603,7 +606,9 @@ hercules_init(UNUSED(const device_t *info))
     video_inform(VIDEO_FLAG_TYPE_MDA, &timing_hercules);
 
     /* Force the LPT3 port to be enabled. */
-    lpt3_setup(LPT_MDA_ADDR);
+    dev->lpt = device_add_inst(&lpt_port_device, 1);
+    lpt_port_setup(dev->lpt, LPT_MDA_ADDR);
+    lpt_set_3bc_used(1);
 
     return dev;
 }
@@ -650,17 +655,6 @@ static const device_config_t hercules_config[] = {
         .bios           = { { 0 } }
     },
     {
-        .name           = "blend",
-        .description    = "Blend",
-        .type           = CONFIG_BINARY,
-        .default_string = NULL,
-        .default_int    = 1,
-        .file_filter    = NULL,
-        .spinner        = { 0 },
-        .selection      = { { 0 } },
-        .bios           = { { 0 } }
-    },
-    {
         .name           = "font",
         .description    = "Font",
         .type           = CONFIG_SELECTION,
@@ -673,8 +667,20 @@ static const device_config_t hercules_config[] = {
             { .description = "IBM Nordic (CP 437-Nordic)",  .value = 1 },
             { .description = "Czech Kamenicky (CP 895) #1", .value = 2 },
             { .description = "Czech Kamenicky (CP 895) #2", .value = 3 },
+            { .description = "Tulip DGA",                   .value = 4 },
             { .description = ""                                        }
         },
+        .bios           = { { 0 } }
+    },
+    {
+        .name           = "blend",
+        .description    = "Blend",
+        .type           = CONFIG_BINARY,
+        .default_string = NULL,
+        .default_int    = 1,
+        .file_filter    = NULL,
+        .spinner        = { 0 },
+        .selection      = { { 0 } },
         .bios           = { { 0 } }
     },
     { .name = "", .description = "", .type = CONFIG_END }

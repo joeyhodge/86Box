@@ -27,11 +27,11 @@
 #include <86box/86box.h>
 #include <86box/io.h>
 #include <86box/timer.h>
+#include <86box/device.h>
 #include <86box/lpt.h>
 #include <86box/pit.h>
 #include <86box/mem.h>
 #include <86box/rom.h>
-#include <86box/device.h>
 #include <86box/video.h>
 #include <86box/vid_mda.h>
 #include <86box/plat_unused.h>
@@ -130,8 +130,8 @@ mda_recalctimings(mda_t *mda)
     double _dispontime;
     double _dispofftime;
     double disptime;
-    disptime     = mda->crtc[MDA_CRTC_HTOTAL] + 1;
-    _dispontime  = mda->crtc[MDA_CRTC_HDISP];
+    disptime     = (mda->crtc[MDA_CRTC_HTOTAL] + 1);
+    _dispontime  = (mda->crtc[MDA_CRTC_HDISP]);
     _dispofftime = disptime - _dispontime;
     _dispontime *= MDACONST;
     _dispofftime *= MDACONST;
@@ -186,7 +186,7 @@ mda_poll(void *priv)
                     // turn off bright bg colours in blink mode
                     if ((mda->mode & MDA_MODE_BLINK)
                         && (color_bg & 0x8))
-                        color_bg & ~(0x8);
+                        color_bg &= ~(0x8);
 
                     // black-on-non black or white colours forced to white
                     // grey-on-colours forced to bright white
@@ -429,12 +429,14 @@ mda_standalone_init(UNUSED(const device_t *info))
         case 1:
             loadfont(FONT_IBM_MDA_437_NORDIC_PATH, 0);
             break;
-
         case 2:
             loadfont(FONT_KAM_PATH, 0);
             break;
         case 3:
             loadfont(FONT_KAMCL16_PATH, 0);
+            break;
+        case 4:
+            loadfont(FONT_TULIP_DGA_PATH, 0);
             break;
     }
 
@@ -451,7 +453,9 @@ mda_standalone_init(UNUSED(const device_t *info))
 
     mda_init(mda);
 
-    lpt3_setup(LPT_MDA_ADDR);
+    mda->lpt = device_add_inst(&lpt_port_device, 1);
+    lpt_port_setup(mda->lpt, LPT_MDA_ADDR);
+    lpt_set_3bc_used(1);
 
     return mda;
 }
@@ -514,6 +518,7 @@ static const device_config_t mda_config[] = {
             { .description = "IBM Nordic (CP 437-Nordic)",  .value = 1 },
             { .description = "Czech Kamenicky (CP 895) #1", .value = 2 },
             { .description = "Czech Kamenicky (CP 895) #2", .value = 3 },
+            { .description = "Tulip DGA",                   .value = 4 },
             { .description = "" }
         },
         .bios           = { { 0 } }
@@ -535,3 +540,4 @@ const device_t mda_device = {
     .force_redraw  = NULL,
     .config        = mda_config
 };
+

@@ -30,6 +30,7 @@
 #    define FLAG_S3_911_16BIT 256
 #    define FLAG_512K_MASK    512
 #    define FLAG_NO_SHIFT3    1024 /* Needed for Bochs VBE. */
+#    define FLAG_PRECISETIME  2048 /* Needed for Copper demo if on dynarec. */
 struct monitor_t;
 
 typedef struct hwcursor_t {
@@ -136,6 +137,10 @@ typedef struct svga_t {
     int packed_4bpp;
     int ps_bit_bug;
     int ati_4color;
+    int vblankend;
+    int render_line_offset;
+    int start_retrace_latch;
+    int vga_mode;
 
     /*The three variables below allow us to implement memory maps like that seen on a 1MB Trio64 :
       0MB-1MB - VRAM
@@ -281,6 +286,10 @@ typedef struct svga_t {
       you should set this flag when entering that mode*/
     int disable_blink;
 
+    /*Force special shifter bypass logic for 8-bpp lowres modes.
+      Needed if the screen is squished on certain S3 cards.*/
+    int force_shifter_bypass;
+
     /*Force CRTC to dword mode, regardless of CR14/CR17. Required for S3 enhanced mode*/
     int force_dword_mode;
 
@@ -339,6 +348,8 @@ extern void     ati8514_out(uint16_t addr, uint8_t val, void *priv);
 extern uint8_t  ati8514_in(uint16_t addr, void *priv);
 extern void     ati8514_recalctimings(svga_t *svga);
 extern uint8_t  ati8514_mca_read(int port, void *priv);
+extern uint8_t  ati8514_rom_readb(uint32_t addr, void *priv);
+extern uint16_t ati8514_rom_readw(uint32_t addr, void *priv);
 extern void     ati8514_mca_write(int port, uint8_t val, void *priv);
 extern void     ati8514_pos_write(uint16_t port, uint8_t val, void *priv);
 extern void     ati8514_init(svga_t *svga, void *ext8514, void *dev8514);
@@ -404,15 +415,15 @@ uint32_t svga_lookup_lut_ram(svga_t* svga, uint32_t val);
 
 /* We need a way to add a device with a pointer to a parent device so it can attach itself to it, and
    possibly also a second ATi 68860 RAM DAC type that auto-sets SVGA render on RAM DAC render change. */
-extern void    ati68860_ramdac_out(uint16_t addr, uint8_t val, void *priv, svga_t *svga);
-extern uint8_t ati68860_ramdac_in(uint16_t addr, void *priv, svga_t *svga);
+extern void    ati68860_ramdac_out(uint16_t addr, uint8_t val, int is_8514, void *priv, svga_t *svga);
+extern uint8_t ati68860_ramdac_in(uint16_t addr, int is_8514, void *priv, svga_t *svga);
 extern void    ati68860_set_ramdac_type(void *priv, int type);
 extern void    ati68860_ramdac_set_render(void *priv, svga_t *svga);
 extern void    ati68860_ramdac_set_pallook(void *priv, int i, uint32_t col);
 extern void    ati68860_hwcursor_draw(svga_t *svga, int displine);
 
-extern void    ati68875_ramdac_out(uint16_t addr, int rs2, int rs3, uint8_t val, void *priv, svga_t *svga);
-extern uint8_t ati68875_ramdac_in(uint16_t addr, int rs2, int rs3, void *priv, svga_t *svga);
+extern void    ati68875_ramdac_out(uint16_t addr, int rs2, int rs3, uint8_t val, int is_8514, void *priv, svga_t *svga);
+extern uint8_t ati68875_ramdac_in(uint16_t addr, int rs2, int rs3, int is_8514, void *priv, svga_t *svga);
 
 extern void    att49x_ramdac_out(uint16_t addr, int rs2, uint8_t val, void *priv, svga_t *svga);
 extern uint8_t att49x_ramdac_in(uint16_t addr, int rs2, void *priv, svga_t *svga);
@@ -433,6 +444,8 @@ extern void    ibm_rgb528_ramdac_out(uint16_t addr, int rs2, uint8_t val, void *
 extern uint8_t ibm_rgb528_ramdac_in(uint16_t addr, int rs2, void *priv, svga_t *svga);
 extern void    ibm_rgb528_recalctimings(void *priv, svga_t *svga);
 extern void    ibm_rgb528_hwcursor_draw(svga_t *svga, int displine);
+extern float   ibm_rgb528_getclock(int clock, void *priv);
+extern void    ibm_rgb528_ramdac_set_ref_clock(void *priv, svga_t *svga, float ref_clock);
 
 extern void  icd2061_write(void *priv, int val);
 extern float icd2061_getclock(int clock, void *priv);
@@ -489,9 +502,12 @@ extern const device_t bt485a_ramdac_device;
 extern const device_t gendac_ramdac_device;
 extern const device_t ibm_rgb528_ramdac_device;
 extern const device_t ics2494an_305_device;
-extern const device_t ati18810_device;
-extern const device_t ati18811_0_device;
-extern const device_t ati18811_1_device;
+extern const device_t ati18810_28800_device;
+extern const device_t ati18811_0_28800_device;
+extern const device_t ati18811_1_28800_device;
+extern const device_t ati18810_mach32_device;
+extern const device_t ati18811_0_mach32_device;
+extern const device_t ati18811_1_mach32_device;
 extern const device_t ics2595_device;
 extern const device_t icd2061_device;
 extern const device_t ics9161_device;

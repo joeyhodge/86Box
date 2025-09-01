@@ -36,7 +36,7 @@
 #include <86box/log.h>
 
 typedef struct log_t {
-    char     buff[1024];
+    char     buff[LOG_SIZE_BUFFER];
     char     dev_name[1024];
     int      seen;
     int      suppr_seen;
@@ -105,8 +105,7 @@ void
 log_out(void *priv, const char *fmt, va_list ap)
 {
     log_t *log = (log_t *) priv;
-    char   temp[1024];
-    char   fmt2[1024];
+    char   temp[LOG_SIZE_BUFFER];
 
     if (log == NULL)
         pclog("WARNING: Logging called with a NULL log pointer\n");
@@ -115,18 +114,20 @@ log_out(void *priv, const char *fmt, va_list ap)
     else if (fmt[0] != '\0') {
         log_ensure_stdlog_open();
 
-        vsprintf(temp, fmt, ap);
+        vsnprintf(temp, sizeof(temp), fmt, ap);
+
         if (log->suppr_seen && !strcmp(log->buff, temp))
             log->seen++;
         else {
             if (log->suppr_seen && log->seen) {
-                log_copy(log, fmt2, "*** %d repeats ***\n", 1024);
-                fprintf(stdlog, fmt2, log->seen);
+                fprintf(stdlog, "*** %d repeats ***\n", log->seen);
             }
             log->seen = 0;
-            strcpy(log->buff, temp);
-            log_copy(log, fmt2, temp, 1024);
-            fprintf(stdlog, fmt2, ap);
+
+            strncpy(log->buff, temp, sizeof(log->buff) - 1);
+            log->buff[sizeof(log->buff) - 1] = '\0';
+
+            fprintf(stdlog, "%s", temp);
         }
 
         fflush(stdlog);
@@ -272,8 +273,8 @@ void
 log_fatal(void *priv, const char *fmt, ...)
 {
     log_t  *log = (log_t *) priv;
-    char    temp[1024];
-    char    fmt2[1024];
+    char    temp[LOG_SIZE_BUFFER];
+    char    fmt2[LOG_SIZE_BUFFER];
     va_list ap;
 
     if (log == NULL)
@@ -286,11 +287,11 @@ log_fatal(void *priv, const char *fmt, ...)
         free(log->cyclic_buff);
     }
 
+    log_copy(log, fmt2, fmt, LOG_SIZE_BUFFER);
     va_start(ap, fmt);
-    log_copy(log, fmt2, fmt, 1024);
     vsprintf(temp, fmt2, ap);
-    fatal_ex(fmt2, ap);
     va_end(ap);
+    fatal("%s", temp);
     exit(-1);
 }
 
@@ -298,8 +299,8 @@ void
 log_warning(void *priv, const char *fmt, ...)
 {
     log_t  *log = (log_t *) priv;
-    char    temp[1024];
-    char    fmt2[1024];
+    char    temp[LOG_SIZE_BUFFER];
+    char    fmt2[LOG_SIZE_BUFFER];
     va_list ap;
 
     if (log == NULL)
@@ -312,11 +313,11 @@ log_warning(void *priv, const char *fmt, ...)
         free(log->cyclic_buff);
     }
 
+    log_copy(log, fmt2, fmt, LOG_SIZE_BUFFER);
     va_start(ap, fmt);
-    log_copy(log, fmt2, fmt, 1024);
     vsprintf(temp, fmt2, ap);
-    warning_ex(fmt2, ap);
     va_end(ap);
+    warning("%s", temp);
 }
 
 static void *

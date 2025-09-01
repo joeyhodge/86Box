@@ -67,7 +67,9 @@ mem_mapping_t bios_mapping;
 mem_mapping_t bios_high_mapping;
 
 page_t  *pages;       /* RAM page table */
+#if (!(defined __amd64__ || defined _M_X64 || defined __aarch64__ || defined _M_ARM64))
 page_t **page_lookup; /* pagetable lookup */
+#endif
 uint32_t pages_sz;    /* #pages in table */
 
 uint8_t *ram;  /* the virtual RAM */
@@ -85,12 +87,23 @@ uint8_t *pccache2;
 
 int        readlnext;
 int        readlookup[256];
+#if (!(defined __amd64__ || defined _M_X64 || defined __aarch64__ || defined _M_ARM64))
 uintptr_t *readlookup2;
+#endif
 uintptr_t  old_rl2;
 uint8_t    uncached = 0;
 int        writelnext;
 int        writelookup[256];
+#if (!(defined __amd64__ || defined _M_X64 || defined __aarch64__ || defined _M_ARM64))
 uintptr_t *writelookup2;
+#endif
+
+#if (defined __amd64__ || defined _M_X64 || defined __aarch64__ || defined _M_ARM64)
+/* The lookup tables. */
+page_t *page_lookup[1048576] = { 0 };
+uintptr_t readlookup2[1048576] = { 0 };
+uintptr_t writelookup2[1048576] = { 0 };
+#endif
 
 uint32_t mem_logical_addr;
 
@@ -1827,6 +1840,9 @@ mem_read_ram(uint32_t addr, UNUSED(void *priv))
         mem_log("Read  B       %02X from %08X\n", ram[addr], addr);
 #endif
 
+    if (is_pcjr)
+        pcjr_waitstates(NULL);
+
     if (cpu_use_exec)
         addreadlookup(mem_logical_addr, addr);
 
@@ -2087,6 +2103,9 @@ mem_write_ram(uint32_t addr, uint8_t val, UNUSED(void *priv))
     if ((addr >= 0xa0000) && (addr <= 0xbffff))
         mem_log("Write B       %02X to   %08X\n", val, addr);
 #endif
+    if (is_pcjr)
+        pcjr_waitstates(NULL);
+
     if (cpu_use_exec) {
         addwritelookup(mem_logical_addr, addr);
         mem_write_ramb_page(addr, val, &pages[addr >> 12]);
@@ -2987,11 +3006,24 @@ mem_init(void)
     ram2      = NULL;
     pages     = NULL;
 
+#if (!(defined __amd64__ || defined _M_X64 || defined __aarch64__ || defined _M_ARM64))
     /* Allocate the lookup tables. */
     page_lookup  = (page_t **) malloc((1 << 20) * sizeof(page_t *));
     readlookup2  = malloc((1 << 20) * sizeof(uintptr_t));
     writelookup2 = malloc((1 << 20) * sizeof(uintptr_t));
+#endif
 }
+
+#if (!(defined __amd64__ || defined _M_X64 || defined __aarch64__ || defined _M_ARM64))
+void
+mem_free(void)
+{
+    free(page_lookup);
+    free(readlookup2);
+    free(writelookup2);
+}
+#endif
+
 
 static void
 umc_page_recalc(uint32_t c, uint32_t phys, int set)

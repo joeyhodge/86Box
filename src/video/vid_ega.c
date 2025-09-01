@@ -149,6 +149,7 @@ ega_out(uint16_t addr, uint8_t val, void *priv)
             ega->vres           = !(val & 0x80);
             ega->pallook        = ega->vres ? pallook16 : pallook64;
             ega->vidclock       = val & 4;
+            pclog("clock = %01X\n", (val & 0x0c) >> 2);
             ega->miscout        = val;
             ega->overscan_color = ega->vres ? pallook16[ega->attrregs[0x11] & 0x0f] :
                                               pallook64[ega->attrregs[0x11] & 0x3f];
@@ -158,9 +159,11 @@ ega_out(uint16_t addr, uint8_t val, void *priv)
             if (ega->alt_addr == 1)
                 base_addr = 0x02a0;
 #endif
-            io_removehandler(base_addr, 0x0020, ega_in, NULL, NULL, ega_out, NULL, NULL, ega);
-            if (!(val & 1))
-                io_sethandler(base_addr, 0x0020, ega_in, NULL, NULL, ega_out, NULL, NULL, ega);
+            if (ega->priv_parent == NULL) {
+                io_removehandler(base_addr, 0x0020, ega_in, NULL, NULL, ega_out, NULL, NULL, ega);
+                if (!(val & 1))
+                    io_sethandler(base_addr, 0x0020, ega_in, NULL, NULL, ega_out, NULL, NULL, ega);
+            }
             ega_recalctimings(ega);
             if ((type == EGA_TYPE_COMPAQ) && !(val & 0x02))
                 mem_mapping_disable(&ega->mapping);
@@ -601,7 +604,22 @@ ega_recalctimings(ega_t *ega)
     ega->linedbl  = ega->crtc[9] & 0x80;
     ega->rowcount = ega->crtc[9] & 0x1f;
 
-    if (ega_type == EGA_TYPE_COMPAQ) {
+    if (ega->actual_type == EGA_SUPEREGA) {
+        switch ((ega->miscout >> 2) & 0x03) {
+            case 0x00:
+                crtcconst = (cpuclock / 16257000.0 * (double) (1ULL << 32));
+                break;
+            case 0x01:
+                crtcconst = (cpuclock / (157500000.0 / 11.0) * (double) (1ULL << 32));
+                break;
+            default:
+            case 0x02: case 0x03:
+                crtcconst = (cpuclock / 25110000.0 * (double) (1ULL << 32));
+                break;
+        }
+
+        crtcconst *= mdiv;
+    } else if (ega_type == EGA_TYPE_COMPAQ) {
         color = (ega->miscout & 1);
         clksel = ((ega->miscout & 0xc) >> 2);
 
@@ -641,9 +659,10 @@ ega_recalctimings(ega_t *ega)
         crtcconst *= mdiv;
     } else {
         if (ega->vidclock)
-            crtcconst = (ega->seqregs[1] & 1) ? MDACONST : (MDACONST * (9.0 / 8.0));
+            crtcconst = (cpuclock / 16257000.0 * (double) (1ULL << 32));
         else
-            crtcconst = (ega->seqregs[1] & 1) ? CGACONST : (CGACONST * (9.0 / 8.0));
+            crtcconst = (cpuclock / (157500000.0 / 11.0) * (double) (1ULL << 32));
+        crtcconst *= mdiv;
     }
     ega->dot_clock = crtcconst / mdiv;
 
@@ -1893,7 +1912,7 @@ const device_t cpqega_device = {
 };
 
 const device_t sega_device = {
-    .name          = "SuperEGA",
+    .name          = "Chips & Technologies SuperEGA",
     .internal_name = "superega",
     .flags         = DEVICE_ISA,
     .local         = EGA_SUPEREGA,

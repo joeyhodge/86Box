@@ -17,8 +17,15 @@
 
 #pragma once
 
-#define PCJR_RGB       0
-#define PCJR_COMPOSITE 1
+#define PCJR_RGB          0
+#define PCJR_COMPOSITE    1
+#define PCJR_RGB_NO_BROWN 4
+#define PCJR_RGB_IBM_5153 5
+
+#define DOUBLE_NONE               0
+#define DOUBLE_SIMPLE             1
+#define DOUBLE_INTERPOLATE_SRGB   2
+#define DOUBLE_INTERPOLATE_LINEAR 3
 
 typedef struct pcjr_s 
 {
@@ -54,6 +61,7 @@ typedef struct pcjr_s
     int           lastline;
     int           composite;
     int           apply_hd;
+    int           double_type;
 
         /* Keyboard Controller stuff. */
     int        latched;

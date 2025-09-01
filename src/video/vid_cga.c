@@ -8,15 +8,13 @@
  *
  *          Emulation of the old and new IBM CGA graphics cards.
  *
- *
- *
  * Authors: Sarah Walker, <https://pcem-emulator.co.uk/>
  *          Miran Grca, <mgrca8@gmail.com>
  *          W. M. Martinez, <anikom15@outlook.com>
  *
  *          Copyright 2008-2019 Sarah Walker.
  *          Copyright 2016-2019 Miran Grca.
- *          Copyright 2023 W. M. Martinez
+ *          Copyright 2023      W. M. Martinez
  */
 #include <stdio.h>
 #include <stdint.h>
@@ -48,8 +46,10 @@
 #define DOUBLE_INTERPOLATE_SRGB   2
 #define DOUBLE_INTERPOLATE_LINEAR 3
 
-typedef union
-{
+#define DEVICE_VRAM      0x4000
+#define DEVICE_VRAM_MASK 0x3fff
+
+typedef union {
     uint32_t color;
     struct {
         uint8_t b;
@@ -206,11 +206,11 @@ cga_write(uint32_t addr, uint8_t val, void *priv)
 {
     cga_t *cga = (cga_t *) priv;
 
-    cga->vram[addr & 0x3fff] = val;
+    cga->vram[addr & DEVICE_VRAM_MASK] = val;
     if (cga->snow_enabled) {
         int offset                  = ((timer_get_remaining_u64(&cga->timer) / CGACONST) * 2) & 0xfc;
-        cga->charbuffer[offset]     = cga->vram[addr & 0x3fff];
-        cga->charbuffer[offset | 1] = cga->vram[addr & 0x3fff];
+        cga->charbuffer[offset]     = cga->vram[addr & DEVICE_VRAM_MASK];
+        cga->charbuffer[offset | 1] = cga->vram[addr & DEVICE_VRAM_MASK];
     }
     cga_waitstates(cga);
 }
@@ -223,10 +223,10 @@ cga_read(uint32_t addr, void *priv)
     cga_waitstates(cga);
     if (cga->snow_enabled) {
         int offset                  = ((timer_get_remaining_u64(&cga->timer) / CGACONST) * 2) & 0xfc;
-        cga->charbuffer[offset]     = cga->vram[addr & 0x3fff];
-        cga->charbuffer[offset | 1] = cga->vram[addr & 0x3fff];
+        cga->charbuffer[offset]     = cga->vram[addr & DEVICE_VRAM_MASK];
+        cga->charbuffer[offset | 1] = cga->vram[addr & DEVICE_VRAM_MASK];
     }
-    return cga->vram[addr & 0x3fff];
+    return cga->vram[addr & DEVICE_VRAM_MASK];
 }
 
 void
@@ -253,7 +253,7 @@ cga_recalctimings(cga_t *cga)
 static void
 cga_render(cga_t *cga, int line)
 {
-    uint16_t cursoraddr  = (cga->crtc[CGA_CRTC_CURSOR_ADDR_LOW] | (cga->crtc[CGA_CRTC_CURSOR_ADDR_HIGH] << 8)) & 0x3fff;
+    uint16_t cursoraddr  = (cga->crtc[CGA_CRTC_CURSOR_ADDR_LOW] | (cga->crtc[CGA_CRTC_CURSOR_ADDR_HIGH] << 8)) & DEVICE_VRAM_MASK;
     int      drawcursor;
     int      x;
     int      column;
@@ -282,7 +282,7 @@ cga_render(cga_t *cga, int line)
                 buffer32->line[line][column + (cga->crtc[CGA_CRTC_HDISP] << 4) + 8] = (cga->cgacol & 15) + 16;
         }
     }
-    if (cga->cgamode & CGA_MODE_FLAG_HIGHRES) {
+    if (cga->cgamode & CGA_MODE_FLAG_HIGHRES) { /* 80-column text */
         for (x = 0; x < cga->crtc[CGA_CRTC_HDISP]; x++) {
             if (cga->cgamode & CGA_MODE_FLAG_VIDEO_ENABLE) {
                 chr  = cga->charbuffer[x << 1];
@@ -313,8 +313,8 @@ cga_render(cga_t *cga, int line)
     } else if (!(cga->cgamode & CGA_MODE_FLAG_GRAPHICS)) {
         for (x = 0; x < cga->crtc[CGA_CRTC_HDISP]; x++) {
             if (cga->cgamode & CGA_MODE_FLAG_VIDEO_ENABLE) {
-                chr  = cga->vram[(cga->memaddr << 1) & 0x3fff];
-                attr = cga->vram[((cga->memaddr << 1) + 1) & 0x3fff];
+                chr  = cga->vram[(cga->memaddr << 1) & DEVICE_VRAM_MASK];
+                attr = cga->vram[((cga->memaddr << 1) + 1) & DEVICE_VRAM_MASK];
             } else
                 chr = attr = 0;
             drawcursor = ((cga->memaddr == cursoraddr) && cga->cursorvisible && cga->cursoron);
@@ -340,7 +340,7 @@ cga_render(cga_t *cga, int line)
                 }
             }
         }
-    } else if (!(cga->cgamode & CGA_MODE_FLAG_HIGHRES_GRAPHICS)) {
+    } else if (!(cga->cgamode & CGA_MODE_FLAG_HIGHRES_GRAPHICS)) { /* not hi-res (but graphics) => 4-color mode */
         cols[0] = (cga->cgacol & 15) | 16;
         col     = (cga->cgacol & 16) ? 24 : 16;
         if (cga->cgamode & CGA_MODE_FLAG_BW) {
@@ -370,7 +370,7 @@ cga_render(cga_t *cga, int line)
                 dat <<= 2;
             }
         }
-    } else {
+    } else { /* 2-color hi-res graphics mode */
         cols[0] = 0;
         cols[1] = (cga->cgacol & 15) + 16;
         for (x = 0; x < cga->crtc[CGA_CRTC_HDISP]; x++) {
@@ -454,10 +454,10 @@ cga_interpolate_linear(uint8_t co1, uint8_t co2, double fraction)
 }
 
 static color_t
-cga_interpolate_lookup(cga_t *cga, color_t color1, color_t color2, UNUSED(double fraction))
+cga_interpolate_lookup(color_t color1, color_t color2, int double_type)
 {
     color_t ret;
-    uint8_t dt = cga->double_type - DOUBLE_INTERPOLATE_SRGB;
+    uint8_t dt = double_type - DOUBLE_INTERPOLATE_SRGB;
 
     ret.a = 0x00;
     ret.r = interp_lut[dt][color1.r][color2.r];
@@ -468,10 +468,8 @@ cga_interpolate_lookup(cga_t *cga, color_t color1, color_t color2, UNUSED(double
 }
 
 static void
-cga_interpolate(cga_t *cga, int x, int y, int w, int h)
+cga_interpolate(int x, int y, int w, int h, int double_type)
 {
-    double quotient = 0.5;
-
     for (int i = y; i < (y + h); i++) {
         if (i & 1)  for (int j = x; j < (x + w); j++) {
             int prev = i - 1;
@@ -496,22 +494,55 @@ cga_interpolate(cga_t *cga, int x, int y, int w, int h)
             else
                 next_color.color = 0x00000000;
 
-            interim_1 = cga_interpolate_lookup(cga, prev_color, black, quotient);
-            interim_2 = cga_interpolate_lookup(cga, black, next_color, quotient);
-            final = cga_interpolate_lookup(cga, interim_1, interim_2, quotient);
+            interim_1 = cga_interpolate_lookup(prev_color, black, double_type);
+            interim_2 = cga_interpolate_lookup(black, next_color, double_type);
+            final     = cga_interpolate_lookup(interim_1, interim_2, double_type);
 
             buffer32->line[i][j] = final.color;
         }
     }
 }
 
-static void
-cga_blit_memtoscreen(cga_t *cga, int x, int y, int w, int h)
+void
+cga_interpolate_init(void)
 {
-    if (cga->double_type > DOUBLE_SIMPLE)
-        cga_interpolate(cga, x, y, w, h);
+    for (uint16_t i = 0; i < 256; i++) {
+        for (uint16_t j = 0; j < 256; j++) {
+            interp_lut[0][i][j] = cga_interpolate_srgb(i, j, 0.5);
+            interp_lut[1][i][j] = cga_interpolate_linear(i, j, 0.5);
+        }
+    }
+}
+
+void
+cga_blit_memtoscreen(int x, int y, int w, int h, int double_type)
+{
+    if (double_type > DOUBLE_SIMPLE)
+        cga_interpolate(x, y, w, h, double_type);
 
     video_blit_memtoscreen(x, y, w, h);
+}
+
+void
+cga_do_blit(int vid_xsize, int firstline, int lastline, int double_type)
+{
+    if (double_type > DOUBLE_NONE) {
+        if (enable_overscan)
+            cga_blit_memtoscreen(0, (firstline - 4) << 1,
+                                 vid_xsize, ((lastline - firstline) << 1) + 16,
+                                 double_type);
+        else
+            cga_blit_memtoscreen(8, firstline << 1,
+                                 vid_xsize, (lastline - firstline) << 1,
+                                 double_type);
+    } else {
+        if (enable_overscan)
+            video_blit_memtoscreen(0, firstline - 4,
+                                   vid_xsize, (lastline - firstline) + 8);
+        else
+            video_blit_memtoscreen(8, firstline,
+                                   vid_xsize, lastline - firstline);
+    }
 }
 
 void
@@ -553,19 +584,17 @@ cga_poll(void *priv)
                     cga_render(cga, (cga->displine << 1) + 1);
                     break;
             }
-        } else {
-            switch (cga->double_type) {
-                default:
-                    cga_render_blank(cga, cga->displine << 1);
-                    break;
-                case DOUBLE_NONE:
-                    cga_render_blank(cga, cga->displine);
-                    break;
-                case DOUBLE_SIMPLE:
-                    cga_render_blank(cga, cga->displine << 1);
-                    cga_render_blank(cga, (cga->displine << 1) + 1);
-                    break;
-            }
+        } else  switch (cga->double_type) {
+            default:
+                cga_render_blank(cga, cga->displine << 1);
+                break;
+            case DOUBLE_NONE:
+                cga_render_blank(cga, cga->displine);
+                break;
+            case DOUBLE_SIMPLE:
+                cga_render_blank(cga, cga->displine << 1);
+                cga_render_blank(cga, (cga->displine << 1) + 1);
+                break;
         }
 
         switch (cga->double_type) {
@@ -605,7 +634,7 @@ cga_poll(void *priv)
             cga->vadj--;
             if (!cga->vadj) {
                 cga->cgadispon = 1;
-                cga->memaddr = cga->memaddr_backup = (cga->crtc[CGA_CRTC_START_ADDR_LOW] | (cga->crtc[CGA_CRTC_START_ADDR_HIGH] << 8)) & 0x3fff;
+                cga->memaddr = cga->memaddr_backup = (cga->crtc[CGA_CRTC_START_ADDR_LOW] | (cga->crtc[CGA_CRTC_START_ADDR_HIGH] << 8)) & DEVICE_VRAM_MASK;
                 cga->scanline               = 0;
             }
         } else if (cga->scanline == cga->crtc[CGA_CRTC_MAX_SCANLINE_ADDR]) {
@@ -623,7 +652,7 @@ cga_poll(void *priv)
                 cga->vadj = cga->crtc[CGA_CRTC_VTOTAL_ADJUST];
                 if (!cga->vadj) {
                     cga->cgadispon = 1;
-                    cga->memaddr = cga->memaddr_backup = (cga->crtc[CGA_CRTC_START_ADDR_LOW] | (cga->crtc[CGA_CRTC_START_ADDR_HIGH] << 8)) & 0x3fff;
+                    cga->memaddr = cga->memaddr_backup = (cga->crtc[CGA_CRTC_START_ADDR_LOW] | (cga->crtc[CGA_CRTC_START_ADDR_HIGH] << 8)) & DEVICE_VRAM_MASK;
                 }
                 
                 switch (cga->crtc[CGA_CRTC_CURSOR_START] & 0x60) {
@@ -651,9 +680,7 @@ cga_poll(void *priv)
                     cga->lastline++;
 
                     xs_temp = x;
-                    ys_temp = cga->lastline - cga->firstline;
-                    if (cga->double_type > DOUBLE_NONE)
-                        ys_temp <<= 1;
+                    ys_temp = (cga->lastline - cga->firstline) << 1;
 
                     if ((xs_temp > 0) && (ys_temp > 0)) {
                         if (xs_temp < 64)
@@ -667,30 +694,13 @@ cga_poll(void *priv)
                             (ys_temp != ysize) || video_force_resize_get())) {
                             xsize = xs_temp;
                             ysize = ys_temp;
-                            if (cga->double_type > DOUBLE_NONE)
-                                set_screen_size(xsize, ysize + (enable_overscan ? 16 : 0));
-                            else
-                                set_screen_size(xsize, ysize + (enable_overscan ? 8 : 0));
+                            set_screen_size(xsize, ysize + (enable_overscan ? 16 : 0));
 
                             if (video_force_resize_get())
                                 video_force_resize_set(0);
                         }
 
-                        if (cga->double_type > DOUBLE_NONE) {
-                            if (enable_overscan)
-                                cga_blit_memtoscreen(cga, 0, (cga->firstline - 4) << 1,
-                                                     xsize, ((cga->lastline - cga->firstline) << 1) + 16);
-                            else
-                                cga_blit_memtoscreen(cga, 8, cga->firstline << 1,
-                                                     xsize, (cga->lastline - cga->firstline) << 1);
-                        } else {
-                            if (enable_overscan)
-                                video_blit_memtoscreen(0, cga->firstline - 4,
-                                                       xsize, (cga->lastline - cga->firstline) + 8);
-                            else
-                                video_blit_memtoscreen(8, cga->firstline,
-                                                       xsize, cga->lastline - cga->firstline);
-                        }
+                        cga_do_blit(xsize, cga->firstline, cga->lastline, cga->double_type);
                     }
 
                     frames++;
@@ -728,7 +738,7 @@ cga_poll(void *priv)
             cga->cursorvisible = 1;
         if (cga->cgadispon && (cga->cgamode & CGA_MODE_FLAG_HIGHRES)) {
             for (x = 0; x < (cga->crtc[CGA_CRTC_HDISP] << 1); x++)
-                cga->charbuffer[x] = cga->vram[((cga->memaddr << 1) + x) & 0x3fff];
+                cga->charbuffer[x] = cga->vram[((cga->memaddr << 1) + x) & DEVICE_VRAM_MASK];
         }
     }
 }
@@ -744,9 +754,8 @@ void *
 cga_standalone_init(UNUSED(const device_t *info))
 {
     int    display_type;
-    cga_t *cga = malloc(sizeof(cga_t));
+    cga_t *cga = calloc(1, sizeof(cga_t));
 
-    memset(cga, 0, sizeof(cga_t));
     video_inform(VIDEO_FLAG_TYPE_CGA, &timing_cga);
 
     display_type      = device_get_config_int("display_type");
@@ -754,7 +763,7 @@ cga_standalone_init(UNUSED(const device_t *info))
     cga->revision     = device_get_config_int("composite_type");
     cga->snow_enabled = device_get_config_int("snow_enabled");
 
-    cga->vram = malloc(0x4000);
+    cga->vram = malloc(DEVICE_VRAM);
 
     cga_comp_init(cga->revision);
     timer_add(&cga->timer, cga_poll, cga, 1);
@@ -769,13 +778,21 @@ cga_standalone_init(UNUSED(const device_t *info))
     update_cga16_color(cga->cgamode);
 
     cga->double_type = device_get_config_int("double_type");
+    cga_interpolate_init();
 
-    for (uint16_t i = 0; i < 256; i++) {
-        for (uint16_t j = 0; j < 256; j++) {
-            interp_lut[0][i][j] = cga_interpolate_srgb(i, j, 0.5);
-            interp_lut[1][i][j] = cga_interpolate_linear(i, j, 0.5);
-        }
+    switch(device_get_config_int("font")) {
+        case 0:
+            loadfont(FONT_IBM_MDA_437_PATH, 0);
+            break;
+        case 1:
+            loadfont(FONT_IBM_MDA_437_NORDIC_PATH, 0);
+            break;
+        case 4:
+            loadfont(FONT_TULIP_DGA_PATH, 0);
+            break;
     }
+
+    monitors[monitor_index_global].mon_composite = !!cga->composite;
 
     return cga;
 }
@@ -877,6 +894,22 @@ const device_config_t cga_config[] = {
             { .description = "sRGB interpolation",   .value = DOUBLE_INTERPOLATE_SRGB   },
             { .description = "Linear interpolation", .value = DOUBLE_INTERPOLATE_LINEAR },
             { .description = ""                                                         }
+        },
+        .bios           = { { 0 } }
+    },
+    {
+        .name           = "font",
+        .description    = "Font",
+        .type           = CONFIG_SELECTION,
+        .default_string = NULL,
+        .default_int    = 0,
+        .file_filter    = NULL,
+        .spinner        = { 0 },
+        .selection      = {
+            { .description = "US (CP 437)",                 .value = 0 },
+            { .description = "IBM Nordic (CP 437-Nordic)",  .value = 1 },
+            { .description = "Tulip DGA",                   .value = 4 },
+            { .description = ""                                        }
         },
         .bios           = { { 0 } }
     },

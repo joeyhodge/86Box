@@ -75,6 +75,7 @@ enum {
 #define FONT_IBM_MDA_437_NORDIC_PATH "roms/video/mda/4733197.bin"
 #define FONT_KAM_PATH                "roms/video/mda/kam.bin"
 #define FONT_KAMCL16_PATH            "roms/video/mda/kamcl16.bin"
+#define FONT_TULIP_DGA_PATH          "roms/video/mda/tulip-dga-bios.bin"
 
 typedef struct video_timings_t {
     int type;
@@ -129,6 +130,8 @@ typedef struct monitor_t {
     int                      mon_force_resize;
     int                      mon_fullchange;
     int                      mon_changeframecount;
+    int                      mon_renderedframes;
+    atomic_int               mon_actualrenderedframes;
     atomic_int               mon_screenshots;
     uint32_t                *mon_pal_lookup;
     int                     *mon_cga_palette;
@@ -136,6 +139,8 @@ typedef struct monitor_t {
     int                      mon_cga_palette_static; /* Whether it should not be freed by the API. */
     const video_timings_t   *mon_vid_timings;
     int                      mon_vid_type;
+    atomic_bool              mon_interlace;
+    atomic_bool              mon_composite;
     struct blit_data_struct *mon_blit_data_ptr;
 } monitor_t;
 
@@ -357,12 +362,14 @@ extern const device_t chips_69000_onboard_device;
 
 /* Cirrus Logic GD54xx */
 extern const device_t gd5401_isa_device;
+extern const device_t gd5401_onboard_device;
 extern const device_t gd5402_isa_device;
 extern const device_t gd5402_onboard_device;
 extern const device_t gd5420_isa_device;
 extern const device_t gd5420_onboard_device;
 extern const device_t gd5422_isa_device;
 extern const device_t gd5424_vlb_device;
+extern const device_t gd5424_onboard_device;
 extern const device_t gd5426_isa_device;
 extern const device_t gd5426_diamond_speedstar_pro_a1_isa_device;
 extern const device_t gd5426_vlb_device;
@@ -395,6 +402,12 @@ extern const device_t gd5440_onboard_pci_device;
 extern const device_t gd5446_pci_device;
 extern const device_t gd5446_stb_pci_device;
 extern const device_t gd5480_pci_device;
+
+/* IBM CGA */
+extern const device_t cga_device;
+
+/* Pravetz CGA */
+extern const device_t cga_pravetz_device;
 
 /* Compaq CGA */
 extern const device_t compaq_cga_device;
@@ -472,10 +485,12 @@ extern const device_t if386jega_device;
 
 /* Oak OTI-0x7 */
 extern const device_t oti037c_device;
+extern const device_t oti037_pbl300sx_device;
 extern const device_t oti067_device;
 extern const device_t oti067_acer386_device;
 extern const device_t oti067_ama932j_device;
 extern const device_t oti077_acer100t_device;
+extern const device_t oti077_pcs44c_device;
 extern const device_t oti077_device;
 
 /* Paradise/WD (S)VGA */
@@ -486,6 +501,9 @@ extern const device_t paradise_pvga1a_device;
 extern const device_t paradise_wd90c11_megapc_device;
 extern const device_t paradise_wd90c11_device;
 extern const device_t paradise_wd90c30_device;
+
+/* Quadram Quadcolor I / I + II */
+extern const device_t quadcolor_device;
 
 /* Realtek (S)VGA */
 extern const device_t realtek_rtg3105_device;
@@ -559,7 +577,6 @@ extern const device_t s3_diamond_stealth_2000pro_pci_device;
 extern const device_t s3_virge_385_pci_device;
 extern const device_t s3_virge_357_pci_device;
 extern const device_t s3_virge_357_agp_device;
-extern const device_t s3_diamond_stealth_4000_pci_device;
 extern const device_t s3_diamond_stealth_4000_agp_device;
 extern const device_t s3_trio3d2x_pci_device;
 extern const device_t s3_trio3d2x_agp_device;
@@ -613,6 +630,9 @@ extern const device_t velocity_200_agp_device;
 
 /* Wyse 700 */
 extern const device_t wy700_device;
+
+/* Yamaha V6355 */
+extern const device_t v6355d_device;
 
 /* Tandy */
 extern const device_t tandy_1000_video_device; 

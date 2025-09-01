@@ -149,11 +149,11 @@ static const scancode scancode_tandy[512] = {
     { .mk = {      0x51, 0 }, .brk = {             0xd1, 0 } }, /* 051 */
     { .mk = {      0x52, 0 }, .brk = {             0xd2, 0 } }, /* 052 */
     { .mk = {      0x56, 0 }, .brk = {             0xd6, 0 } }, /* 053 */
-    { .mk = {            0 }, .brk = {                   0 } }, /* 054 */
+    { .mk = {      0x54, 0 }, .brk = {             0xd4, 0 } }, /* 054 */
     { .mk = {            0 }, .brk = {                   0 } }, /* 055 */
     { .mk = {            0 }, .brk = {                   0 } }, /* 056 */
-    { .mk = {            0 }, .brk = {                   0 } }, /* 057 */
-    { .mk = {            0 }, .brk = {                   0 } }, /* 058 */
+    { .mk = {      0x59, 0 }, .brk = {             0xd9, 0 } }, /* 057 */
+    { .mk = {      0x5a, 0 }, .brk = {             0xda, 0 } }, /* 058 */
     { .mk = {            0 }, .brk = {                   0 } }, /* 059 */
     { .mk = {            0 }, .brk = {                   0 } }, /* 05a */
     { .mk = {            0 }, .brk = {                   0 } }, /* 05b */
@@ -392,7 +392,7 @@ static const scancode scancode_tandy[512] = {
     { .mk = {            0 }, .brk = {                   0 } }, /* 144 */
     { .mk = {            0 }, .brk = {                   0 } }, /* 145 */
     { .mk = {      0x46, 0 }, .brk = {             0xc6, 0 } }, /* 146 */
-    { .mk = {      0x47, 0 }, .brk = {             0xc7, 0 } }, /* 147 */
+    { .mk = {      0x58, 0 }, .brk = {             0xd8, 0 } }, /* 147 */
     { .mk = {      0x29, 0 }, .brk = {             0xa9, 0 } }, /* 148 */
     { .mk = {      0x49, 0 }, .brk = {             0xc9, 0 } }, /* 149 */
     { .mk = {            0 }, .brk = {                   0 } }, /* 14a */
@@ -403,7 +403,7 @@ static const scancode scancode_tandy[512] = {
     { .mk = {      0x4f, 0 }, .brk = {             0xcf, 0 } }, /* 14f */
     { .mk = {      0x4a, 0 }, .brk = {             0xca, 0 } }, /* 150 */
     { .mk = {      0x51, 0 }, .brk = {             0xd1, 0 } }, /* 151 */
-    { .mk = {      0x52, 0 }, .brk = {             0xd2, 0 } }, /* 152 */
+    { .mk = {      0x55, 0 }, .brk = {             0xd5, 0 } }, /* 152 */
     { .mk = {      0x53, 0 }, .brk = {             0xd3, 0 } }, /* 153 */
     { .mk = {            0 }, .brk = {                   0 } }, /* 154 */
     { .mk = {            0 }, .brk = {                   0 } }, /* 155 */
@@ -945,7 +945,7 @@ machine_tandy1k_init(const machine_t *model, int type)
                     MEM_MAPPING_INTERNAL, dev);
     mem_mapping_set_addr(&ram_low_mapping, 0, dev->base);
 
-    device_add(&keyboard_tandy_device);
+    device_add(&kbc_tandy_device);
 
     if (fdc_current[0] == FDC_INTERNAL)
         device_add(&fdc_xt_tandy_device);
@@ -995,7 +995,7 @@ machine_tandy1k_init(const machine_t *model, int type)
             break;
     }
 
-    standalone_gameport_type = &gameport_device;
+    standalone_gameport_type = &gameport_200_device;
 
     eep_data_out = 0x0000;
 }

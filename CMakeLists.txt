@@ -36,7 +36,7 @@ if(MUNT_EXTERNAL)
 endif()
 
 project(86Box
-    VERSION 5.0
+    VERSION 5.1
     DESCRIPTION "Emulator of x86-based systems"
     HOMEPAGE_URL "https://86box.net"
     LANGUAGES C CXX)
@@ -137,6 +137,7 @@ option(GDBSTUB      "Enable GDB stub server for debugging"                      
 option(DEV_BRANCH   "Development branch"                                         OFF)
 option(DISCORD      "Discord Rich Presence support"                              ON)
 option(DEBUGREGS486 "Enable debug register opeartion on 486+ CPUs"               OFF)
+option(LIBASAN      "Enable compilation with the addresss sanitizer"             OFF)
 
 if((ARCH STREQUAL "arm64") OR (ARCH STREQUAL "arm"))
     set(NEW_DYNAREC ON)
@@ -183,6 +184,7 @@ cmake_dependent_option(PCL            "Generic PCL5e Printer"                   
 cmake_dependent_option(SIO_DETECT     "Super I/O Detection Helper"               ON    "DEV_BRANCH"  OFF)
 cmake_dependent_option(WACOM          "Wacom Input Devices"                      ON    "DEV_BRANCH"  OFF)
 cmake_dependent_option(XL24           "ATI VGA Wonder XL24 (ATI-28800-6)"        ON    "DEV_BRANCH"  OFF)
+cmake_dependent_option(NETSWITCH      "Network Switch Support"                   ON    "DEV_BRANCH"  OFF)
 
 # Ditto but for Qt
 if(QT)
@@ -220,7 +222,15 @@ if(NOT EMU_BUILD_NUM)
     set(EMU_BUILD_NUM 0)
 endif()
 if(NOT EMU_COPYRIGHT_YEAR)
-    set(EMU_COPYRIGHT_YEAR 2024)
+    set(EMU_COPYRIGHT_YEAR 2025)
 endif()
+
+# Libasan
+if(LIBASAN)
+    add_compile_options(-fsanitize=address)
+    add_link_options(-fsanitize=address)
+endif()
+
+set(CMAKE_TOP_LEVEL_PROCESSED TRUE)
 
 add_subdirectory(src)
