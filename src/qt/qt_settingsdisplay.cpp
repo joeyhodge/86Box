@@ -8,8 +8,6 @@
  *
  *          Display settings UI module.
  *
- *
- *
  * Authors: Joakim L. Gilje <jgilje@jgilje.net>
  *
  *          Copyright 2021 Joakim L. Gilje
@@ -22,6 +20,8 @@
 #include <QDebug>
 #include <QFileDialog>
 #include <QStringBuilder>
+
+#include <cstdint>
 
 extern "C" {
 #include <86box/86box.h>
@@ -343,11 +343,10 @@ void SettingsDisplay::on_pushButtonExportDefault_clicked()
     if (!str.isEmpty()) {
         QFile file(str);
         if (file.open(QFile::WriteOnly)) {
-            ssize_t size = 0;
-            auto bytes = ddc_create_default_edid(&size);
+            uint8_t *bytes = nullptr;
+            auto size = ddc_create_default_edid(&bytes);
             file.write((char*)bytes, size);
             file.close();
         }
     }
 }
-

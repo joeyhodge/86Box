@@ -54,6 +54,7 @@
 #include <86box/hdc.h>
 #include <86box/hdc_ide.h>
 #include <86box/fdd.h>
+#include <86box/fdd_audio.h>
 #include <86box/fdc_ext.h>
 #include <86box/gameport.h>
 #include <86box/keyboard.h>
@@ -211,6 +212,8 @@ load_general(void)
     rctrl_is_lalt = ini_section_get_int(cat, "rctrl_is_lalt", 0);
     update_icons  = ini_section_get_int(cat, "update_icons", 1);
 
+    start_in_fullscreen |= ini_section_get_int(cat, "start_in_fullscreen", 0);
+
     window_remember = ini_section_get_int(cat, "window_remember", 0);
 
     if (!window_remember && !(vid_resize & 2))
@@ -263,6 +266,7 @@ load_general(void)
 
     do_auto_pause = ini_section_get_int(cat, "do_auto_pause", 0);
     force_constant_mouse = ini_section_get_int(cat, "force_constant_mouse", 0);
+    fdd_sounds_enabled = ini_section_get_int(cat, "fdd_sounds_enabled", 1);
 
     p = ini_section_get_string(cat, "uuid", NULL);
     if (p != NULL)
@@ -570,7 +574,7 @@ load_input_devices(void)
     p = ini_section_get_string(cat, "keyboard_type", NULL);
     if (p != NULL)
         keyboard_type = keyboard_get_from_internal_name(p);
-    else if (strstr(machine_get_internal_name(), "pc5086"))
+    else if (machines[machine].init == machine_xt_pc5086_init)
         keyboard_type = KEYBOARD_TYPE_PC_XT;
     else if (machine_has_bus(machine, MACHINE_BUS_PS2_PORTS)) {
         if (machine_has_flags(machine, MACHINE_KEYBOARD_JIS))
@@ -1032,7 +1036,7 @@ load_storage_controllers(void)
                 if (!hdc_current[j]) {
                     if (!legacy_cards[i]) {
                         if (!p) {
-                            hdc_current[j] = hdc_get_from_internal_name("internal");
+                            hdc_current[j] = hdc_get_from_internal_name((j == 0) ? "internal" : "none");
                         } else if (!strcmp(p, "xtide_plus")) {
                             hdc_current[j] = hdc_get_from_internal_name("xtide");
                             sprintf(temp, "PC/XT XTIDE #%i", j + 1);
@@ -1376,10 +1380,15 @@ load_floppy_and_cdrom_drives(void)
     int           c;
     int           d;
     int           count = cdrom_get_type_count();
+    
+#ifndef DISABLE_FDD_AUDIO
+    fdd_audio_load_profiles();
+#endif
 
     memset(temp, 0x00, sizeof(temp));
     for (c = 0; c < FDD_NUM; c++) {
         sprintf(temp, "fdd_%02i_type", c + 1);
+
         p = ini_section_get_string(cat, temp, (c < 2) ? "525_2dd" : "none");
         if (!strcmp(p, "525_2hd_ps2"))
             d = fdd_get_from_internal_name("525_2hd");
@@ -1434,6 +1443,15 @@ load_floppy_and_cdrom_drives(void)
             sprintf(temp, "fdd_%02i_check_bpb", c + 1);
             ini_section_delete_var(cat, temp);
         }
+        sprintf(temp, "fdd_%02i_audio", c + 1);        
+#ifndef DISABLE_FDD_AUDIO
+        p    = ini_section_get_string(cat, temp, "none");
+        int prof = fdd_audio_get_profile_by_internal_name(p);
+        fdd_set_audio_profile(c, prof);
+#else
+        fdd_set_audio_profile(c, 0);
+#endif        
+
         for (int i = 0; i < MAX_PREV_IMAGES; i++) {
             fdd_image_history[c][i] = (char *) calloc((MAX_IMAGE_PATH_LEN + 1) << 1, sizeof(char));
             sprintf(temp, "fdd_%02i_image_history_%02i", c + 1, i + 1);
@@ -2410,6 +2428,11 @@ save_general(void)
     else
         ini_section_delete_var(cat, "window_remember");
 
+    if (video_fullscreen)
+        ini_section_set_int(cat, "start_in_fullscreen", video_fullscreen);
+    else
+        ini_section_delete_var(cat, "start_in_fullscreen");
+
     if (vid_resize & 2) {
         sprintf(temp, "%ix%i", fixed_size_x, fixed_size_y);
         ini_section_set_string(cat, "window_fixed_res", temp);
@@ -2471,6 +2494,11 @@ save_general(void)
         ini_section_set_int(cat, "force_constant_mouse", force_constant_mouse);
     else
         ini_section_delete_var(cat, "force_constant_mouse");
+
+    if (fdd_sounds_enabled == 1)
+        ini_section_delete_var(cat, "fdd_sounds_enabled");
+    else
+        ini_section_set_int(cat, "fdd_sounds_enabled", fdd_sounds_enabled);
 
     char cpu_buf[128] = { 0 };
     plat_get_cpu_string(cpu_buf, 128);
@@ -3056,7 +3084,7 @@ save_storage_controllers(void)
         else
             def_hdc = "none";
 
-        if (!strcmp(hdc_get_internal_name(hdc_current[c]), def_hdc))
+        if (!strcmp(hdc_get_internal_name(hdc_current[c]), def_hdc) || ((c > 0) && (hdc_current[c] == 1)))
             ini_section_delete_var(cat, temp);
         else
             ini_section_set_string(cat, temp,
@@ -3409,6 +3437,19 @@ save_floppy_and_cdrom_drives(void)
             else
                 save_image_file(cat, temp, fdd_image_history[c][i]);
         }
+
+        sprintf(temp, "fdd_%02i_audio", c + 1);
+#ifndef DISABLE_FDD_AUDIO
+        int         prof          = fdd_get_audio_profile(c);
+        const char *internal_name = fdd_audio_get_profile_internal_name(prof);
+        if (internal_name && strcmp(internal_name, "none") != 0) {
+            ini_section_set_string(cat, temp, internal_name);
+        } else {
+            ini_section_delete_var(cat, temp);
+        }
+#else
+        ini_section_delete_var(cat, temp);
+#endif
     }
 
     for (c = 0; c < CDROM_NUM; c++) {

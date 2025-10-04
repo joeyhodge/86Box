@@ -79,6 +79,7 @@
 #include <86box/mouse.h>
 #include <86box/gameport.h>
 #include <86box/fdd.h>
+#include <86box/fdd_audio.h>
 #include <86box/fdc.h>
 #include <86box/fdc_ext.h>
 #include <86box/hdd.h>
@@ -107,6 +108,7 @@
 #include <86box/apm.h>
 #include <86box/acpi.h>
 #include <86box/nv/vid_nv_rivatimer.h>
+#include <86box/vfio.h>
 
 // Disable c99-designator to avoid the warnings about int ng
 #ifdef __clang__
@@ -230,6 +232,7 @@ int      other_scsi_present = 0;                                  /* SCSI contro
 int      is_pcjr = 0;                                             /* The current machine is PCjr. */
 int      portable_mode = 0;                                       /* We are running in portable mode
                                                                      (global dirs = exe path) */
+int      global_cfg_overridden = 0;                               /* Global config file was overriden on command line */
 
 int      monitor_edid = 0;                                        /* (C) Which EDID to use. 0=default, 1=custom. */
 char     monitor_edid_path[1024] = { 0 };                         /* (C) Path to custom EDID */
@@ -237,6 +240,7 @@ char     monitor_edid_path[1024] = { 0 };                         /* (C) Path to
 double   video_gl_input_scale = 1.0;                              /* (C) OpenGL 3.x input scale */
 int      video_gl_input_scale_mode = FULLSCR_SCALE_FULL;          /* (C) OpenGL 3.x input stretch mode */
 int      color_scheme = 0;                                        /* (C) Color scheme of UI (Windows-only) */
+int      fdd_sounds_enabled = 1;                                  /* (C) Floppy drive sounds enabled */
 
 // Accelerator key array
 struct accelKey acc_keys[NUM_ACCELS];
@@ -852,6 +856,7 @@ usage:
             if ((c + 1) == argc || plat_dir_check(argv[c + 1]))
                 goto usage;
 
+            global_cfg_overridden = 1;
             global = argv[++c];
         } else if (!strcasecmp(argv[c], "--image") || !strcasecmp(argv[c], "-I")) {
             if ((c + 1) == argc)
@@ -1151,11 +1156,13 @@ usage:
         start_vmm = 1;
     } else {
         strncpy(vmm_path, vmm_path_cfg, sizeof(vmm_path) - 1);
+        vmm_path[sizeof(vmm_path) - 1] = '\0';
     }
 
     if (start_vmm) {
         pclog("# VM Manager enabled. Path: %s\n", vmm_path);
         strncpy(usr_path, vmm_path, sizeof(usr_path) - 1);
+        usr_path[sizeof(usr_path) - 1] = '\0';
     } else
 #endif
     {
@@ -1374,6 +1381,11 @@ pc_init_modules(void)
     video_init();
 
     fdd_init();
+    
+    if (fdd_sounds_enabled) {
+        fdd_audio_load_profiles();
+        fdd_audio_init();
+    }
 
     sound_init();
 
@@ -1642,6 +1654,11 @@ pc_reset_hard_init(void)
        the chances of the SCSI controller ending up on the bridge. */
     video_voodoo_init();
 
+#if defined(USE_VFIO) && defined(__linux__)
+    /* Initialize VFIO */
+    vfio_init();
+#endif
+
     /* installs first game port if no device provides one, must be late */
     if (joystick_type[0])
         gameport_update_joystick_type(0);
@@ -1801,9 +1818,6 @@ pc_close(UNUSED(thread_t *ptr))
 
     gdbstub_close();
 
-#if (!(defined __amd64__ || defined _M_X64 || defined __aarch64__ || defined _M_ARM64))
-    mem_free();
-#endif
 }
 
 #ifdef __APPLE__
@@ -1864,6 +1878,12 @@ pc_run(void)
 
     if (title_update) {
         mouse_msg_idx = ((mouse_type == MOUSE_TYPE_NONE) || (mouse_input_mode >= 1)) ? 2 : !!mouse_capture;
+#ifdef SCREENSHOT_MODE
+        if (force_10ms)
+            fps = ((fps + 2) / 5) * 5;
+        else
+            fps = ((fps + 20) / 50) * 50;
+#endif
         swprintf(temp, sizeof_w(temp), mouse_msg[mouse_msg_idx], fps / (force_10ms ? 1 : 10), force_10ms ? 0 : (fps % 10));
 #ifdef __APPLE__
         /* Needed due to modifying the UI on the non-main thread is a big no-no. */

@@ -1,20 +1,17 @@
 /*
-* 86Box	A hypervisor and IBM PC system emulator that specializes in
-*		running old operating systems and software designed for IBM
-*		PC systems and compatibles from 1981 through fairly recent
-*		system designs based on the PCI bus.
-*
-*		This file is part of the 86Box distribution.
-*
-*		86Box VM manager system details section module
-*
-*
-*
-* Authors:	cold-brewed
-*
-*		Copyright 2024 cold-brewed
-*/
-
+ * 86Box    A hypervisor and IBM PC system emulator that specializes in
+ *          running old operating systems and software designed for IBM
+ *          PC systems and compatibles from 1981 through fairly recent
+ *          system designs based on the PCI bus.
+ *
+ *          This file is part of the 86Box distribution.
+ *
+ *          86Box VM manager system details section module
+ *
+ * Authors: cold-brewed
+ *
+ *          Copyright 2024 cold-brewed
+ */
 #include "qt_vmmanager_detailsection.hpp"
 #include "ui_qt_vmmanager_detailsection.h"
 
@@ -161,7 +158,8 @@ VMManagerDetailSection::setupMainLayout()
 void
 VMManagerDetailSection::setSections()
 {
-    int row = 0;
+    int row    = 0;
+    bool empty = true;
 
     for (const auto& section : sections) {
         QStringList sectionsToAdd = section.value.split(sectionSeparator);
@@ -189,12 +187,13 @@ VMManagerDetailSection::setSections()
 
             const auto hSpacer = new QSpacerItem(0, 0, QSizePolicy::Expanding, QSizePolicy::Minimum);
             frameGridLayout->addItem(hSpacer, row, 2);
+            empty = false;
             row++;
         }
     }
 
     collapseButton->setContent(ui->detailFrame);
-    if (sections.size())
+    if (!empty)
         setVisible(true);
 }
 void
@@ -302,4 +301,3 @@ void CollapseButton::showContent() {
     animator_.setDirection(QAbstractAnimation::Forward);
     animator_.start();
 }
-

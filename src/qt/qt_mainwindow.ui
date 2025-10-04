@@ -340,7 +340,7 @@
      <normaloff>:/menuicons/qt/icons/hard_reset.ico</normaloff>:/menuicons/qt/icons/hard_reset.ico</iconset>
    </property>
    <property name="text">
-    <string>&amp;Hard Reset...</string>
+    <string>&amp;Hard reset</string>
    </property>
    <property name="iconVisibleInMenu">
     <bool>false</bool>
@@ -1053,7 +1053,7 @@
  <customwidgets>
   <customwidget>
    <class>RendererStack</class>
-   <extends>QStackedWidget</extends>
+   <extends>QWidget</extends>
    <header>qt_rendererstack.hpp</header>
    <container>1</container>
   </customwidget>

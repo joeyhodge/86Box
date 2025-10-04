@@ -8,8 +8,6 @@
  *
  *          S3 ViRGE emulation.
  *
- *
- *
  * Authors: Sarah Walker, <https://pcem-emulator.co.uk/>
  *          Miran Grca, <mgrca8@gmail.com>
  *
@@ -828,6 +826,9 @@ s3_virge_recalctimings(svga_t *svga)
 
     svga->hdisp = svga->hdisp_old;
 
+    if (virge->chip >= S3_TRIO3D2X) {
+        svga_set_ramdac_type(svga, (svga->seqregs[0x1b] & 0x10) ? RAMDAC_8BIT : RAMDAC_6BIT);
+    }
     if (!svga->scrblank && svga->attr_palette_enable && (svga->crtc[0x43] & 0x80)) {
         /* TODO: In case of bug reports, disable 9-dots-wide character clocks in graphics modes. */
         svga->dots_per_clock = ((svga->seqregs[1] & 1) ? 16 : 18);
@@ -1112,14 +1113,8 @@ s3_virge_updatemapping(virge_t *virge)
         if (virge->linear_base == 0xa0000) {
             mem_mapping_set_addr(&svga->mapping, 0xa0000, 0x10000);
             mem_mapping_disable(&virge->linear_mapping);
-        } else {
-            if ((virge->chip == S3_VIRGEVX) || (virge->chip == S3_TRIO3D2X))
-                virge->linear_base &= 0xfe000000;
-            else
-                virge->linear_base &= 0xfc000000;
-
+        } else
             mem_mapping_set_addr(&virge->linear_mapping, virge->linear_base, virge->linear_size);
-        }
         svga->fb_only = 1;
     } else {
         mem_mapping_disable(&virge->linear_mapping);
@@ -1951,9 +1946,9 @@ s3_virge_mmio_write_l(uint32_t addr, uint32_t val, void *priv)
                 break;
             case 0x8190:
                 virge->streams.sec_ctrl              = val;
-                virge->streams.dda_horiz_accumulator = val & 0xfff;
-                if (val & 0x1000)
-                    virge->streams.dda_horiz_accumulator |= ~0xfff;
+                virge->streams.dda_horiz_accumulator = val & 0x7ff;
+                if (val & 0x800)
+                    virge->streams.dda_horiz_accumulator |= ~0x7ff;
 
                 virge->streams.sdif = (val >> 24) & 7;
                 break;
@@ -1966,9 +1961,9 @@ s3_virge_mmio_write_l(uint32_t addr, uint32_t val, void *priv)
                 if (val & 0x800)
                     virge->streams.k1_horiz_scale |= ~0x7ff;
 
-                virge->streams.k2_horiz_scale = (val >> 16) & 0x7ff;
-                if ((val >> 16) & 0x800)
-                    virge->streams.k2_horiz_scale |= ~0x7ff;
+                virge->streams.k2_horiz_scale = (val >> 16) & 0x3ff;
+                if ((val >> 16) & 0x400)
+                    virge->streams.k2_horiz_scale |= ~0x3ff;
 
                 svga_recalctimings(svga);
                 svga->fullchange = changeframecount;
@@ -2024,14 +2019,14 @@ s3_virge_mmio_write_l(uint32_t addr, uint32_t val, void *priv)
                     virge->streams.k1_vert_scale |= ~0x7ff;
                 break;
             case 0x81e4:
-                virge->streams.k2_vert_scale = val & 0x7ff;
-                if (val & 0x800)
-                    virge->streams.k2_vert_scale |= ~0x7ff;
+                virge->streams.k2_vert_scale = val & 0x3ff;
+                if (val & 0x400)
+                    virge->streams.k2_vert_scale |= ~0x3ff;
                 break;
             case 0x81e8:
-                virge->streams.dda_vert_accumulator = val & 0xfff;
-                if (val & 0x1000)
-                    virge->streams.dda_vert_accumulator |= ~0xfff;
+                virge->streams.dda_vert_accumulator = val & 0x7ff;
+                if (val & 0x800)
+                    virge->streams.dda_vert_accumulator |= ~0x7ff;
 
                 svga_recalctimings(svga);
                 svga->fullchange = changeframecount;
@@ -5189,7 +5184,10 @@ s3_virge_pci_write(UNUSED(int func), int addr, uint8_t val, void *priv)
             return;
 
         case 0x13:
-            svga->crtc[0x59] = (virge->chip == S3_VIRGEVX || virge->chip == S3_TRIO3D2X) ? (val & 0xfe) : (val & 0xfc);
+            if (virge->chip == S3_VIRGEVX || virge->chip == S3_TRIO3D2X)
+                svga->crtc[0x59] = (svga->crtc[0x59] & 0x01) | (val & 0xfe);
+            else
+                svga->crtc[0x59] = (svga->crtc[0x59] & 0x03) | (val & 0xfc);
             s3_virge_updatemapping(virge);
             return;
 

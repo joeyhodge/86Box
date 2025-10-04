@@ -8,8 +8,6 @@
  *
  *          OpenGL renderer for Qt, mostly ported over from PCem.
  *
- *
- *
  * Authors: Teemu Korhonen
  *          Cacodemon345
  *          bit
@@ -20,7 +18,6 @@
  *          Copyright 2017 Bit
  *          Copyright 2017-2020 Sarah Walker
  */
-
 #include "qt_renderercommon.hpp"
 #include "qt_mainwindow.hpp"
 
@@ -830,11 +827,9 @@ OpenGLRenderer::OpenGLRenderer(QWidget *parent)
     format.setVersion(3, 2);
 #endif
     format.setProfile(QSurfaceFormat::OpenGLContextProfile::CoreProfile);
-
-    if (QOpenGLContext::openGLModuleType() == QOpenGLContext::LibGLES)
-        format.setRenderableType(QSurfaceFormat::OpenGLES);
-
+    format.setRenderableType(QSurfaceFormat::OpenGL);
     format.setSwapInterval(video_vsync ? 1 : 0);
+    format.setAlphaBufferSize(0);
 
     setFormat(format);
 
@@ -1223,6 +1218,9 @@ OpenGLRenderer::resizeEvent(QResizeEvent *event)
         destination.y(),
         destination.width(),
         destination.height());
+    
+    if (video_framerate == -1)
+        render();
 }
 
 void
@@ -1708,15 +1706,15 @@ OpenGLRenderer::render()
         plat_tempfile(fn, NULL, (char*)".png");
         strcat(path, fn);
 
-        unsigned char *rgba = (unsigned char *) calloc(1, (size_t) width * height * 4);
+        unsigned char *rgb = (unsigned char *) calloc(1, (size_t) width * height * 3);
         
         glw.glFinish();
-        glw.glReadPixels(window_rect.x, window_rect.y, width, height, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+        glw.glReadPixels(window_rect.x, window_rect.y, width, height, GL_RGB, GL_UNSIGNED_BYTE, rgb);
 
-        QImage image(rgba, width, height, QImage::Format_RGBA8888);
+        QImage image(rgb, width, height, QImage::Format_RGB888);
         image.mirrored(false, true).save(path, "png");
         monitors[r_monitor_index].mon_screenshots--;
-        free(rgba);
+        free(rgb);
     }
 
     glw.glDisable(GL_FRAMEBUFFER_SRGB);

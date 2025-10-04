@@ -806,15 +806,15 @@ write_p2(atkbc_t *dev, uint8_t val)
             cpu_set_edx();
             flushmmucache();
             if ((kbc_ven == KBC_VEN_ALI) ||
-                !strcmp(machine_get_internal_name(), "spc7700plw") ||
-                !strcmp(machine_get_internal_name(), "pl4600c"))
+                (machines[machine].init == machine_at_spc7700plw_init) ||
+                (machines[machine].init == machine_at_pl4600c_init))
                 smbase = 0x00030000;
 
             /* Yes, this is a hack, but until someone gets ahold of the real PCD-2L
                and can find out what they actually did to make it boot from FFFFF0
                correctly despite A20 being gated when the CPU is reset, this will
                have to do. */
-            if ((kbc_ven == KBC_VEN_SIEMENS) || !strcmp(machine_get_internal_name(), "acera1g"))
+            if ((kbc_ven == KBC_VEN_SIEMENS) || (machines[machine].init == machine_at_acera1g_init))
                 is486 ? loadcs(0xf000) : loadcs_2386(0xf000);
         }
     }
@@ -975,7 +975,7 @@ write_cmd_data_ami(void *priv, uint8_t val)
             return 0;
 
         case 0xc1:
-            kbc_at_log("ATkbc: AMI MegaKey - write %02X to P1\n", val);
+            kbc_at_log("ATkbc: AMI - write %02X to P1\n", val);
             dev->p1 = val;
             return 0;
 
@@ -1160,11 +1160,14 @@ write_cmd_ami(void *priv, uint8_t val)
 
         case 0xaf: /* set extended controller RAM */
             if ((kbc_ven != KBC_VEN_SIEMENS) && (kbc_ven != KBC_VEN_ALI)) {
-                kbc_at_log("ATkbc: set extended controller RAM\n");
-                dev->wantdata      = 1;
-                dev->state         = STATE_KBC_PARAM;
-                dev->command_phase = 1;
-                ret = 0;
+                if (((kbc_ami_revision >= 'H') && (kbc_ami_revision < 'X')) ||
+                    (kbc_ami_revision = '5')) {
+                    kbc_at_log("ATkbc: set extended controller RAM\n");
+                    dev->wantdata      = 1;
+                    dev->state         = STATE_KBC_PARAM;
+                    dev->command_phase = 1;
+                    ret = 0;
+                }
             }
             break;
 
@@ -1184,7 +1187,7 @@ write_cmd_ami(void *priv, uint8_t val)
             kbc_at_log("ATkbc: set KBC lines P22-P23 (P2 bits 2-3) low\n");
             if (!(dev->flags & DEVICE_PCI))
                 write_p2(dev, dev->p2 & ~(4 << (val & 0x01)));
-            if (strstr(machine_get_internal_name(), "sb486pv") != NULL)
+            if (machines[machine].init == machine_at_sb486pv_init)
                 kbc_delay_to_ob(dev, 0x03, 0, 0x00);
             else
                 kbc_delay_to_ob(dev, dev->ob, 0, 0x00);
@@ -1214,27 +1217,33 @@ write_cmd_ami(void *priv, uint8_t val)
             break;
 
         case 0xc1: /* write P1 */
-            kbc_at_log("ATkbc: AMI MegaKey - write P1\n");
+            kbc_at_log("ATkbc: AMI - write P1\n");
             dev->wantdata  = 1;
             dev->state     = STATE_KBC_PARAM;
             ret = 0;
             break;
 
         case 0xc4:
-            /* set KBC line P14 low */
-            kbc_at_log("ATkbc: set KBC line P14 (P1 bit 4) low\n");
-            dev->p1 &= 0xef;
-            kbc_delay_to_ob(dev, dev->ob, 0, 0x00);
-            dev->pending++;
-            ret = 0;
+            if (((kbc_ami_revision >= 'P') && (kbc_ami_revision < 'X')) ||
+                (kbc_ami_revision = '5')) {
+                /* set KBC line P14 low */
+                kbc_at_log("ATkbc: set KBC line P14 (P1 bit 4) low\n");
+                dev->p1 &= 0xef;
+                kbc_delay_to_ob(dev, dev->ob, 0, 0x00);
+                dev->pending++;
+                ret = 0;
+            }
             break;
         case 0xc5:
-            /* set KBC line P15 low */
-            kbc_at_log("ATkbc: set KBC line P15 (P1 bit 5) low\n");
-            dev->p1 &= 0xdf;
-            kbc_delay_to_ob(dev, dev->ob, 0, 0x00);
-            dev->pending++;
-            ret = 0;
+            if (((kbc_ami_revision >= 'P') && (kbc_ami_revision < 'X')) ||
+                (kbc_ami_revision = '5')) {
+                /* set KBC line P15 low */
+                kbc_at_log("ATkbc: set KBC line P15 (P1 bit 5) low\n");
+                dev->p1 &= 0xdf;
+                kbc_delay_to_ob(dev, dev->ob, 0, 0x00);
+                dev->pending++;
+                ret = 0;
+            }
             break;
 
         case 0xc8:
@@ -1271,20 +1280,26 @@ write_cmd_ami(void *priv, uint8_t val)
             break;
 
         case 0xcc:
-            /* set KBC line P14 high */
-            kbc_at_log("ATkbc: set KBC line P14 (P1 bit 4) high\n");
-            dev->p1 |= 0x10;
-            kbc_delay_to_ob(dev, dev->ob, 0, 0x00);
-            dev->pending++;
-            ret = 0;
+            if (((kbc_ami_revision >= 'P') && (kbc_ami_revision < 'X')) ||
+                (kbc_ami_revision = '5')) {
+                /* set KBC line P14 high */
+                kbc_at_log("ATkbc: set KBC line P14 (P1 bit 4) high\n");
+                dev->p1 |= 0x10;
+                kbc_delay_to_ob(dev, dev->ob, 0, 0x00);
+                dev->pending++;
+                ret = 0;
+            }
             break;
         case 0xcd:
             /* set KBC line P15 high */
-            kbc_at_log("ATkbc: set KBC line P15 (P1 bit 5) high\n");
-            dev->p1 |= 0x20;
-            kbc_delay_to_ob(dev, dev->ob, 0, 0x00);
-            dev->pending++;
-            ret = 0;
+            if (((kbc_ami_revision >= 'P') && (kbc_ami_revision < 'X')) ||
+                (kbc_ami_revision = '5')) {
+                kbc_at_log("ATkbc: set KBC line P15 (P1 bit 5) high\n");
+                dev->p1 |= 0x20;
+                kbc_delay_to_ob(dev, dev->ob, 0, 0x00);
+                dev->pending++;
+                ret = 0;
+            }
             break;
 
         case 0xef: /* ??? - sent by AMI486 */
@@ -2612,7 +2627,7 @@ kbc_at_process_cmd(void *priv)
                 if (dev->ib == 0xbb)
                     break;
 
-                if (strstr(machine_get_internal_name(), "pb41") != NULL)
+                if (machines[machine].init == machine_at_pb410a_init)
                     cpu_override_dynarec = 1;
 
                 if (dev->misc_flags & FLAG_PS2) {
@@ -2744,7 +2759,7 @@ kbc_at_port_1_read(uint16_t port, void *priv)
      */
     if (!(dev->misc_flags & FLAG_PS2) && (dev->irq[0] != 0xffff))
         picintclevel(1 << dev->irq[0], &dev->irq_state);
-    if ((strstr(machine_get_internal_name(), "pb41") != NULL) && (cpu_override_dynarec == 1))
+    if ((machines[machine].init == machine_at_pb410a_init) && (cpu_override_dynarec == 1))
         cpu_override_dynarec = 0;
 
     kbc_at_log("ATkbc: [%04X:%08X] read (%04X) = %02X\n",  CS, cpu_state.pc, port, ret);

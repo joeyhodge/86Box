@@ -8,8 +8,6 @@
  *
  *          Definitions for the video controller module.
  *
- *
- *
  * Authors: Sarah Walker, <https://pcem-emulator.co.uk/>
  *          Miran Grca, <mgrca8@gmail.com>
  *          Fred N. van Kempen, <decwiz@yahoo.com>
@@ -18,7 +16,6 @@
  *          Copyright 2016-2019 Miran Grca.
  *          Copyright 2017-2019 Fred N. van Kempen.
  */
-
 #ifndef EMU_VIDEO_H
 #define EMU_VIDEO_H
 
@@ -412,7 +409,7 @@ extern const device_t cga_pravetz_device;
 /* Compaq CGA */
 extern const device_t compaq_cga_device;
 extern const device_t compaq_cga_2_device;
-extern const device_t compaq_plasma_device; 
+extern const device_t compaq_plasma_device;
 
 /* Olivetti OGC */
 extern const device_t ogc_device;
@@ -513,8 +510,11 @@ extern const device_t realtek_rtg3106_device;
 extern const device_t s3_orchid_86c911_isa_device;
 extern const device_t s3_diamond_stealth_vram_isa_device;
 extern const device_t s3_ami_86c924_isa_device;
+extern const device_t s3_elsa_winner1000_86c928_vlb_device;
+extern const device_t s3_elsa_winner2000_86c928_isa_device;
 extern const device_t s3_metheus_86c928_isa_device;
 extern const device_t s3_metheus_86c928_vlb_device;
+extern const device_t s3_elsa_winner1000_86c928_pci_device;
 extern const device_t s3_spea_mercury_lite_86c928_pci_device;
 extern const device_t s3_spea_mirage_86c801_isa_device;
 extern const device_t s3_winner1000_805_isa_device;
@@ -635,9 +635,9 @@ extern const device_t wy700_device;
 extern const device_t v6355d_device;
 
 /* Tandy */
-extern const device_t tandy_1000_video_device; 
-extern const device_t tandy_1000hx_video_device; 
-extern const device_t tandy_1000sl_video_device; 
+extern const device_t tandy_1000_video_device;
+extern const device_t tandy_1000hx_video_device;
+extern const device_t tandy_1000sl_video_device;
 
 #endif
 

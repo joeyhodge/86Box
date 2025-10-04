@@ -9,8 +9,6 @@
  *          Implementation of the IDE emulation for hard disks and ATAPI
  *          CD-ROM devices.
  *
- *
- *
  * Authors: Sarah Walker, <https://pcem-emulator.co.uk/>
  *          Miran Grca, <mgrca8@gmail.com>
  *
@@ -2100,6 +2098,8 @@ ide_readb(uint16_t addr, void *priv)
         case 0x4: /* Cylinder low */
             if (ide->type == IDE_NONE)
                 ret = 0x7f;
+            else if (ide->type == IDE_ATAPI_SHADOW)
+                ret = 0x00;
             else
                 ret = ide->tf->cylinder & 0xff;
 #if defined(ENABLE_IDE_LOG) && (ENABLE_IDE_LOG == 2)
@@ -2111,6 +2111,8 @@ ide_readb(uint16_t addr, void *priv)
         case 0x5: /* Cylinder high */
             if (ide->type == IDE_NONE)
                 ret = 0x7f;
+            else if (ide->type == IDE_ATAPI_SHADOW)
+                ret = 0x00;
             else
                 ret = ide->tf->cylinder >> 8;
 #if defined(ENABLE_IDE_LOG) && (ENABLE_IDE_LOG == 2)

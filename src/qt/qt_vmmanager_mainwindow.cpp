@@ -1,20 +1,17 @@
 /*
-* 86Box	A hypervisor and IBM PC system emulator that specializes in
-*		running old operating systems and software designed for IBM
-*		PC systems and compatibles from 1981 through fairly recent
-*		system designs based on the PCI bus.
-*
-*		This file is part of the 86Box distribution.
-*
-*		86Box VM manager main window
-*
-*
-*
-* Authors:	cold-brewed
-*
-*		Copyright 2024 cold-brewed
-*/
-
+ * 86Box    A hypervisor and IBM PC system emulator that specializes in
+ *          running old operating systems and software designed for IBM
+ *          PC systems and compatibles from 1981 through fairly recent
+ *          system designs based on the PCI bus.
+ *
+ *          This file is part of the 86Box distribution.
+ *
+ *          86Box VM manager main window
+ *
+ * Authors: cold-brewed
+ *
+ *          Copyright 2024 cold-brewed
+ */
 #include "qt_vmmanager_mainwindow.hpp"
 #include "qt_vmmanager_main.hpp"
 #include "qt_vmmanager_preferences.hpp"
@@ -130,35 +127,50 @@ VMManagerMainWindow(QWidget *parent)
     connect(this, &VMManagerMainWindow::languageUpdated, vmm, &VMManagerMain::onLanguageUpdated);
 #ifdef Q_OS_WINDOWS
     connect(this, &VMManagerMainWindow::darkModeUpdated, vmm, &VMManagerMain::onDarkModeUpdated);
-    connect(this, &VMManagerMainWindow::preferencesUpdated, [this] () { vmm_dark_mode_filter->reselectDarkMode(); });
+    connect(this, &VMManagerMainWindow::preferencesUpdated, [] () { vmm_dark_mode_filter->reselectDarkMode(); });
 #endif
 
     {
         auto config = new VMManagerConfig(VMManagerConfig::ConfigType::General);
-        this->ui->actionRemember_size_and_position->setChecked(!!config->getStringValue("window_remember").toInt());
-        if (ui->actionRemember_size_and_position->isChecked()) {
-            QStringList list = config->getStringValue("window_coordinates").split(',');
-            for (auto& cur : list) {
-                cur = cur.trimmed();
-            }
-            QRect geom;
-            geom.setX(list[0].toInt());
-            geom.setY(list[1].toInt());
-            geom.setWidth(list[2].toInt());
-            geom.setHeight(list[3].toInt());
+        if (!!config->getStringValue("window_remember").toInt()) {
+            QString coords = config->getStringValue("window_coordinates");
+            if (!coords.isEmpty()) {
+                QStringList list = coords.split(',');
+                for (auto& cur : list) {
+                    cur = cur.trimmed();
+                }
+                QRect geom;
+                geom.setX(list[0].toInt());
+                geom.setY(list[1].toInt());
+                geom.setWidth(list[2].toInt());
+                geom.setHeight(list[3].toInt());
 
-            setGeometry(geom);
+                setGeometry(geom);
+            }
+
             if (!!config->getStringValue("window_maximized").toInt()) {
                 setWindowState(windowState() | Qt::WindowMaximized);
             }
+
+            QString splitter = config->getStringValue("window_splitter");
+            if (!splitter.isEmpty()) {
+                QStringList list = splitter.split(',');
+                for (auto& cur : list) {
+                    cur = cur.trimmed();
+                }
+                QList<int> paneSizes;
+                paneSizes.append(list[0].toInt());
+                paneSizes.append(list[1].toInt());
+
+                vmm->setPaneSizes(paneSizes);
+            }
         } else {
-            config->setStringValue("window_remember", "");
             config->setStringValue("window_coordinates", "");
             config->setStringValue("window_maximized", "");
+            config->setStringValue("window_splitter", "");
         }
         delete config;
     }
-
 }
 
 VMManagerMainWindow::~
@@ -214,14 +226,14 @@ VMManagerMainWindow::saveSettings() const
     const auto currentSelection = vmm->getCurrentSelection();
     const auto config = new VMManagerConfig(VMManagerConfig::ConfigType::General);
     config->setStringValue("last_selection", currentSelection);
-    config->setStringValue("window_remember", QString::number(ui->actionRemember_size_and_position->isChecked()));
-    if (ui->actionRemember_size_and_position->isChecked()) {
+    if (!!config->getStringValue("window_remember").toInt()) {
         config->setStringValue("window_coordinates", QString::asprintf("%i, %i, %i, %i", this->geometry().x(), this->geometry().y(), this->geometry().width(), this->geometry().height()));
         config->setStringValue("window_maximized", this->isMaximized() ? "1" : "");
+        config->setStringValue("window_splitter", QString::asprintf("%i, %i", vmm->getPaneSizes()[0], vmm->getPaneSizes()[1]));
     } else {
-        config->setStringValue("window_remember", "");
         config->setStringValue("window_coordinates", "");
         config->setStringValue("window_maximized", "");
+        config->setStringValue("window_splitter", "");
     }
     // Sometimes required to ensure the settings save before the app exits
     config->sync();
