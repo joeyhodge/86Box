@@ -168,15 +168,16 @@ static const device_config_t lx6_config[] = {
         .bios           = {
             {
                 .name          = "Award Modular BIOS v4.51PG - Revision LY",
-                .internal_name = "lx6", .bios_type = BIOS_NORMAL, 
+                .internal_name = "lx6",
+                .bios_type     = BIOS_NORMAL, 
                 .files_no      = 1,
                 .local         = 0,
                 .size          = 131072,
-                .files         = { "roms/machines/lx6/LX6C_LY.BIN", "" }
+                .files         = { "roms/machines/lx6/LX6C_LY.bin", "" }
             },
             {
-                .name          = "Award Modular BIOS v4.51PG - Revision PZ Beta",
-                .internal_name = "lx6_beta",
+                .name          = "Award Modular BIOS v4.51PG - Revision PZ (Beta)",
+                .internal_name = "lx6_pz",
                 .bios_type     = BIOS_NORMAL, 
                 .files_no      = 1,
                 .local         = 0,
@@ -571,16 +572,71 @@ machine_at_p3bf_init(const machine_t *model)
     return ret;
 }
 
+static const device_config_t ax6bc_config[] = {
+    // clang-format off
+    {
+        .name           = "bios",
+        .description    = "BIOS Version",
+        .type           = CONFIG_BIOS,
+        .default_string = "ax6bc",
+        .default_int    = 0,
+        .file_filter    = NULL,
+        .spinner        = { 0 },
+        .selection      = { { 0 } },
+        .bios           = {
+            {
+                .name          = "Award Modular BIOS v4.51PGM - Revision R1.10",
+                .internal_name = "ax6bc_451pg",
+                .bios_type     = BIOS_NORMAL,
+                .files_no      = 1,
+                .local         = 0,
+                .size          = 262144,
+                .files         = { "roms/machines/ax6bc/ax6bc110.bin", "" }
+            },
+            {
+                .name          = "Award Modular BIOS v4.60PGM - Revision R2.59",
+                .internal_name = "ax6bc",
+                .bios_type     = BIOS_NORMAL,
+                .files_no      = 1,
+                .local         = 0,
+                .size          = 262144,
+                .files         = { "roms/machines/ax6bc/AX6BC_R2.59.bin", "" }
+            },
+            { .files_no = 0 }
+        }
+    },
+    { .name = "", .description = "", .type = CONFIG_END }
+    // clang-format on
+};
+
+const device_t ax6bc_device = {
+    .name          = "AOpen AX6BC",
+    .internal_name = "ax6bc_device",
+    .flags         = 0,
+    .local         = 0,
+    .init          = NULL,
+    .close         = NULL,
+    .reset         = NULL,
+    .available     = NULL,
+    .speed_changed = NULL,
+    .force_redraw  = NULL,
+    .config        = ax6bc_config
+};
+
 int
 machine_at_ax6bc_init(const machine_t *model)
 {
-    int ret;
+    int         ret = 0;
+    const char *fn;
 
-    ret = bios_load_linear("roms/machines/ax6bc/AX6BC_R2.59.bin",
-                           0x000c0000, 262144, 0);
-
-    if (bios_only || !ret)
+    /* No ROMs available */
+    if (!device_available(model->device))
         return ret;
+
+    device_context(model->device);
+    fn  = device_get_bios_file(machine_get_device(machine), device_get_config_bios("bios"), 0);
+    ret = bios_load_linear(fn, 0x000c0000, 262144, 0);
+    device_context_restore();
 
     machine_at_common_init_ex(model, 2);
 
@@ -709,6 +765,15 @@ static const device_config_t ms6119_config[] = {
         .selection      = { { 0 } },
         .bios           = {
             {
+                .name          = "AMIBIOS 6 (071595) - Revision 1.72 (Packard Bell Tacoma with logo)",
+                .internal_name = "tacoma_172",
+                .bios_type     = BIOS_NORMAL,
+                .files_no      = 1,
+                .local         = 0,
+                .size          = 262144,
+                .files         = { "roms/machines/ms6119/A19P2172.ROM", "" }
+            },
+            {
                 .name          = "AMIBIOS 6 (071595) - Revision 1.90 (Packard Bell Tacoma)",
                 .internal_name = "tacoma",
                 .bios_type     = BIOS_NORMAL,
@@ -800,6 +865,96 @@ machine_at_ms6119_init(const machine_t *model)
     return ret;
 }
 
+static const device_config_t ms6147_config[] = {
+    // clang-format off
+    {
+        .name           = "bios",
+        .description    = "BIOS Version",
+        .type           = CONFIG_BIOS,
+        .default_string = "ms6147",
+        .default_int    = 0,
+        .file_filter    = NULL,
+        .spinner        = { 0 },
+        .selection      = { { 0 } },
+        .bios           = {
+            {
+                .name          = "Award Modular BIOS v4.51PG - Revision 1.8",
+                .internal_name = "ms6147",
+                .bios_type     = BIOS_NORMAL,
+                .files_no      = 1,
+                .local         = 0,
+                .size          = 262144,
+                .files         = { "roms/machines/ms6147/W647MS18.BIN", "" }
+            },
+            {
+                .name          = "Award Modular BIOS v4.51PG - Revision 2.1 (Packard Bell Tempest)",
+                .internal_name = "pbtempest",
+                .bios_type     = BIOS_NORMAL,
+                .files_no      = 1,
+                .local         = 0,
+                .size          = 262144,
+                .files         = { "roms/machines/ms6147/w647p221.pbc", "" }
+            },
+            { .files_no = 0 }
+        }
+    },
+    { .name = "", .description = "", .type = CONFIG_END }
+    // clang-format on
+};
+
+const device_t ms6147_device = {
+    .name          = "MSI MS-6147",
+    .internal_name = "ms6147_device",
+    .flags         = 0,
+    .local         = 0,
+    .init          = NULL,
+    .close         = NULL,
+    .reset         = NULL,
+    .available     = NULL,
+    .speed_changed = NULL,
+    .force_redraw  = NULL,
+    .config        = ms6147_config
+};
+
+int
+machine_at_ms6147_init(const machine_t *model)
+{
+    int         ret = 0;
+    const char *fn;
+
+    /* No ROMs available */
+    if (!device_available(model->device))
+        return ret;
+
+    device_context(model->device);
+    fn  = device_get_bios_file(machine_get_device(machine), device_get_config_bios("bios"), 0);
+    ret = bios_load_linear(fn, 0x000c0000, 262144, 0);
+    device_context_restore();
+
+    machine_at_common_init_ex(model, 2);
+
+    pci_init(PCI_CONFIG_TYPE_1);
+    pci_register_slot(0x00, PCI_CARD_NORTHBRIDGE, 0, 0, 0, 0);
+    pci_register_slot(0x14, PCI_CARD_SOUND,       3, 4, 1, 2);
+    pci_register_slot(0x0E, PCI_CARD_NORMAL,      1, 2, 3, 4);
+    pci_register_slot(0x10, PCI_CARD_NORMAL,      2, 3, 4, 1);
+    pci_register_slot(0x12, PCI_CARD_NORMAL,      3, 4, 1, 2);
+    pci_register_slot(0x07, PCI_CARD_SOUTHBRIDGE, 1, 2, 3, 4);
+    pci_register_slot(0x01, PCI_CARD_AGPBRIDGE,   1, 2, 3, 4);
+    device_add(&i440bx_device);
+    device_add(&piix4e_device);
+    device_add_params(&w83977_device, (void *) (W83977TF | W83977_AMI | W83977_NO_NVR));
+    device_add(&winbond_flash_w29c020_device);
+    spd_register(SPD_TYPE_SDRAM, 0x7, 256);
+
+    if (sound_card_current[0] == SOUND_INTERNAL) {
+        device_add(machine_get_snd_device(machine));
+        device_add(&ct1297_device);
+    }
+
+    return ret;
+}
+
 int
 machine_at_p6sba_init(const machine_t *model)
 {
@@ -838,16 +993,71 @@ machine_at_p6sba_init(const machine_t *model)
     return ret;
 }
 
+static const device_config_t s1846_config[] = {
+    // clang-format off
+    {
+        .name           = "bios",
+        .description    = "BIOS Version",
+        .type           = CONFIG_BIOS,
+        .default_string = "s1846",
+        .default_int    = 0,
+        .file_filter    = NULL,
+        .spinner        = { 0 },
+        .selection      = { { 0 } },
+        .bios           = {
+            {
+                .name          = "AMIBIOS 6 (071595) - Revision 2.00.04",
+                .internal_name = "s1846",
+                .bios_type     = BIOS_NORMAL,
+                .files_no      = 1,
+                .local         = 0,
+                .size          = 262144,
+                .files         = { "roms/machines/s1846/bx46200f.rom", "" }
+            },
+            {
+                .name          = "AMIBIOS 6 (071595) - Revision 2.00.0x (Tulip Vision Line TP90)",
+                .internal_name = "tp90",
+                .bios_type     = BIOS_NORMAL,
+                .files_no      = 1,
+                .local         = 0,
+                .size          = 262144,
+                .files         = { "roms/machines/s1846/1846TP90.BIN", "" }
+            },
+            { .files_no = 0 }
+        }
+    },
+    { .name = "", .description = "", .type = CONFIG_END }
+    // clang-format on
+};
+
+const device_t s1846_device = {
+    .name          = "Tyan Tsunami ATX",
+    .internal_name = "s1846_device",
+    .flags         = 0,
+    .local         = 0,
+    .init          = NULL,
+    .close         = NULL,
+    .reset         = NULL,
+    .available     = NULL,
+    .speed_changed = NULL,
+    .force_redraw  = NULL,
+    .config        = s1846_config
+};
+
 int
 machine_at_s1846_init(const machine_t *model)
 {
-    int ret;
+    int         ret = 0;
+    const char *fn;
 
-    ret = bios_load_linear("roms/machines/s1846/bx46200f.rom",
-                           0x000c0000, 262144, 0);
-
-    if (bios_only || !ret)
+    /* No ROMs available */
+    if (!device_available(model->device))
         return ret;
+
+    device_context(model->device);
+    fn  = device_get_bios_file(machine_get_device(machine), device_get_config_bios("bios"), 0);
+    ret = bios_load_linear(fn, 0x000c0000, 262144, 0);
+    device_context_restore();
 
     machine_at_common_init_ex(model, 2);
 
@@ -876,17 +1086,72 @@ machine_at_s1846_init(const machine_t *model)
     return ret;
 }
 
+static const device_config_t vei8_config[] = {
+    // clang-format off
+    {
+        .name           = "bios",
+        .description    = "BIOS Version",
+        .type           = CONFIG_BIOS,
+        .default_string = "vei8",
+        .default_int    = 0,
+        .file_filter    = NULL,
+        .spinner        = { 0 },
+        .selection      = { { 0 } },
+        .bios           = {
+            {
+                .name          = "Award Modular BIOS v6.00PG - Revision QHW.10.01 (HP Sherwood-B)",
+                .internal_name = "vei8",
+                .bios_type     = BIOS_NORMAL,
+                .files_no      = 1,
+                .local         = 0,
+                .size          = 262144,
+                .files         = { "roms/machines/vei8/QHW1001.BIN", "" }
+            },
+            {
+                .name          = "Award Modular BIOS v6.00PG - Revision R804",
+                .internal_name = "6110zu",
+                .bios_type     = BIOS_NORMAL,
+                .files_no      = 1,
+                .local         = 0,
+                .size          = 262144,
+                .files         = { "roms/machines/vei8/r804.bin", "" }
+            },
+            { .files_no = 0 }
+        }
+    },
+    { .name = "", .description = "", .type = CONFIG_END }
+    // clang-format on
+};
+
+const device_t vei8_device = {
+    .name          = "MiTAC/Trigon 6110Zu",
+    .internal_name = "vei8_device",
+    .flags         = 0,
+    .local         = 0,
+    .init          = NULL,
+    .close         = NULL,
+    .reset         = NULL,
+    .available     = NULL,
+    .speed_changed = NULL,
+    .force_redraw  = NULL,
+    .config        = vei8_config
+};
+
 /* i440ZX */
 int
 machine_at_vei8_init(const machine_t *model)
 {
-    int ret;
+    int         ret = 0;
+    const char *fn;
 
-    ret = bios_load_linear("roms/machines/vei8/QHW1001.BIN",
-                           0x000c0000, 262144, 0);
-
-    if (bios_only || !ret)
+    /* No ROMs available */
+    if (!device_available(model->device))
         return ret;
+
+    device_context(model->device);
+    fn  = device_get_bios_file(machine_get_device(machine), device_get_config_bios("bios"), 0);
+    ret = bios_load_linear(fn, 0x000c0000, 262144, 0);
+    device_context_restore();
 
     machine_at_common_init_ex(model, 2);
 

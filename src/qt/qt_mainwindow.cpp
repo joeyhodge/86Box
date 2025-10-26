@@ -1021,6 +1021,7 @@ void MainWindow::updateShortcuts()
 void
 MainWindow::resizeEvent(QResizeEvent *event)
 {
+#ifdef MOVE_WINDOW
     //qDebug() << pos().x() + event->size().width();
     //qDebug() << pos().y() + event->size().height();
     if (vid_resize == 1 || video_fullscreen)
@@ -1040,6 +1041,7 @@ MainWindow::resizeEvent(QResizeEvent *event)
         if (newY < 1) newY = 1;
     }
     move(newX, newY);
+#endif
 }
 
 void
@@ -2306,7 +2308,14 @@ MainWindow::changeEvent(QEvent *event)
 {
 #ifdef Q_OS_WINDOWS
     if (event->type() == QEvent::LanguageChange) {
+        auto size = this->centralWidget()->size();
         QApplication::setFont(QFont(ProgSettings::getFontName(lang_id), 9));
+        QApplication::processEvents();
+        main_window->centralWidget()->setFixedSize(size);
+        QApplication::processEvents();
+        if (vid_resize == 1) {
+            main_window->centralWidget()->setFixedSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
+        }
     }
 #endif
     QWidget::changeEvent(event);
