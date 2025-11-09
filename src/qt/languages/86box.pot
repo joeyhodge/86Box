@@ -975,10 +975,10 @@ msgstr ""
 msgid "Thrustmaster FCS + Rudder Control System"
 msgstr ""
 
-msgid "Thrustmaster Formula T1/T2 with Adaptor"
+msgid "Thrustmaster Formula T1/T2 with adapter"
 msgstr ""
 
-msgid "Thrustmaster Formula T1/T2 without Adaptor"
+msgid "Thrustmaster Formula T1/T2 without adapter"
 msgstr ""
 
 msgid "None"
@@ -2251,6 +2251,18 @@ msgid "WSS IRQ"
 msgstr ""
 
 msgid "WSS DMA"
+msgstr ""
+
+msgid "RTC IRQ"
+msgstr ""
+
+msgid "RTC Port Address"
+msgstr ""
+
+msgid "Onboard RTC"
+msgstr ""
+
+msgid "Not installed"
 msgstr ""
 
 msgid "Enable OPL"
