@@ -422,7 +422,6 @@ extern int             machine_get_type(int m);
 extern int             machine_get_chipset(int m);
 extern void            machine_close(void);
 extern int             machine_has_mouse(void);
-extern int             machine_is_sony(void);
 
 extern uint8_t         machine_compaq_p1_handler(void);
 extern uint8_t         machine_generic_p1_handler(void);
@@ -971,7 +970,7 @@ extern const device_t  p54tp4xe_device;
 #endif
 extern int             machine_at_p54tp4xe_init(const machine_t *);
 extern int             machine_at_exp8551_init(const machine_t *);
-extern int             machine_at_hpholly_init(const machine_t *);
+extern int             machine_at_holly_init(const machine_t *);
 #ifdef EMU_DEVICE_H
 extern const device_t vectra52_device;
 #endif

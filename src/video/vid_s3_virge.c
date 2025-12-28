@@ -290,9 +290,9 @@ typedef struct virge_t {
     s3d_t s3d_tri;
 
     s3d_t      s3d_buffer[RB_SIZE];
-    atomic_int s3d_read_idx;
-    atomic_int s3d_write_idx;
-    atomic_int s3d_busy;
+    ATOMIC_INT s3d_read_idx;
+    ATOMIC_INT s3d_write_idx;
+    ATOMIC_INT s3d_busy;
 
     struct {
         uint32_t pri_ctrl;
@@ -332,15 +332,15 @@ typedef struct virge_t {
     } streams;
 
     fifo_entry_t fifo[FIFO_SIZE];
-    atomic_int   fifo_read_idx, fifo_write_idx;
-    atomic_int   fifo_thread_run, render_thread_run;
+    ATOMIC_INT   fifo_read_idx, fifo_write_idx;
+    ATOMIC_INT   fifo_thread_run, render_thread_run;
 
     thread_t *fifo_thread;
     event_t  *wake_fifo_thread;
     event_t  *fifo_not_full_event;
 
-    atomic_int  virge_busy;
-    atomic_uint irq_pending;
+    ATOMIC_INT   virge_busy;
+    ATOMIC_UINT  irq_pending;
 
     uint8_t subsys_stat;
     uint8_t subsys_cntl;
@@ -751,7 +751,7 @@ s3_virge_in(uint16_t addr, void *priv)
                     ret = virge->virge_rev;
                     break;
                 case 0x30:
-                    ret = virge->virge_id;
+                    ret = ((svga->crtc[0x38] & 0xcc) != 0x48) ? 0xFF : virge->virge_id;
                     break; /*Chip ID*/
                 case 0x31:
                     ret = (svga->crtc[0x31] & 0xcf) | ((virge->ma_ext & 3) << 4);
@@ -828,6 +828,7 @@ s3_virge_recalctimings(svga_t *svga)
 
     if (virge->chip >= S3_TRIO3D2X) {
         svga_set_ramdac_type(svga, (svga->seqregs[0x1b] & 0x10) ? RAMDAC_8BIT : RAMDAC_6BIT);
+        svga->lut_map = !!(svga->seqregs[0x1b] & 0x8);
     }
     if (!svga->scrblank && svga->attr_palette_enable && (svga->crtc[0x43] & 0x80)) {
         /* TODO: In case of bug reports, disable 9-dots-wide character clocks in graphics modes. */
@@ -5377,6 +5378,7 @@ s3_virge_init(const device_t *info)
               s3_virge_hwcursor_draw,
               s3_virge_overlay_draw);
     virge->svga.hwcursor.cur_ysize = 64;
+    virge->svga.conv_16to32        = tvp3026_conv_16to32;
 
     if (bios_fn != NULL) {
         if (virge->type == S3_VIRGE_GX2)
