@@ -24,8 +24,6 @@
 # - For Windows (MSYS MinGW) builds:
 #   - Packaging requires 7-Zip on Program Files
 #   - Packaging the Ghostscript DLL requires 32-bit and/or 64-bit Ghostscript on Program Files
-#   - Packaging the XAudio2 DLL for FAudio requires it to be at /home/86Box/dll32/xaudio2*.dll
-#     and/or /home/86Box/dll64/xaudio2*.dll (for 32-bit and 64-bit builds respectively)
 # - For Linux builds:
 #   - Only Debian and derivatives are supported
 #   - dpkg and apt-get are called through sudo to manage dependencies; make sure those
@@ -36,25 +34,19 @@
 #       build_arch x86_64 (or arm64)
 #       universal_archs (blank)
 #       ui_interactive no
-#       macosx_deployment_target 10.13 (for x86_64, 10.14 for Qt Vulkan, or 11.0 for arm64)
+#       macosx_deployment_target 10.14 (for x86_64, or 11.0 for arm64)
 #   - For universal building on Apple Silicon hardware, install native MacPorts on the default
 #     /opt/local and Intel MacPorts on /opt/intel, then tell build.sh to build for "x86_64+arm64"
-#   - Qt Vulkan support through MoltenVK requires 10.14 while we target 10.13. We deal with that
-#     (at least for now) by abusing the x86_64h universal slice to branch Haswell and newer Macs
-#     into a Vulkan-enabled but 10.14+ binary, with older ones opting for a 10.13-compatible,
-#     non-Vulkan binary. With this approach, the only machines that miss out on Vulkan despite
-#     supporting Metal are Ivy Bridge ones as well as GPU-upgraded Mac Pros. For building that
-#     Vulkan binary, install another Intel MacPorts on /opt/x86_64h, then use the "x86_64h"
-#     architecture when invoking build.sh (either standalone or as part of an universal build)
-#   - port and sed are called through sudo to manage dependencies; make sure those are configured
-#     as NOPASSWD in /etc/sudoers if you're doing unattended builds
+#   - port, sed and ln are called through sudo to manage dependencies; make sure those are
+#     configured as NOPASSWD in /etc/sudoers if you're doing unattended builds
 #   - Binaries are ad-hoc signed by default; specify a keychain name in ~/86box-keychain-name.txt
 #     and password in ~/86box-keychain-password.txt to sign binaries with the first developer
-#     certificate found inside that keychain.
+#     certificate found inside that keychain
 #   - Notarization uses credentials stored in the same keychain used for signing. To save these
 #     credentials, you must find the keychain's file path, run notarytool store-credentials with
 #     --keychain pointed at that path, and specify the profile name you passed to notarytool in
 #     ~/86box-keychain-notarytool.txt
+#   - The script returns exit code 50 if notarization fails or is not configured
 #
 
 # Define common functions.
@@ -167,6 +159,7 @@ mac_signidentity() {
 	echo "-s -"
 }
 mac_notarize() {
+	is_mac || return 0
 	if keychain_name=$(mac_keychain)
 	then
 		if [ -n "$keychain_name" ]
@@ -178,9 +171,13 @@ mac_notarize() {
 				if [ -n "$keychain_path" ]
 				then
 					echo [-] Notarizing with profile [$keychain_profile] in keychain [$keychain_name]
-					# FIXME: needs a stapling system
-					xcrun notarytool submit "$1" --keychain-profile "$keychain_profile" --keychain "$keychain_path" --no-wait
-					return $?
+					if xcrun notarytool submit "$1" --keychain-profile "$keychain_profile" --keychain "$keychain_path" --no-wait
+					then
+						echo [-] Notarization submission successful
+						return 0
+					else
+						err="Notarization submission failed"
+					fi
 				else
 					err="File path for keychain [$keychain_name] not found"
 				fi
@@ -325,7 +322,7 @@ echo [-] Building [$package_name] for [$arch] with flags [$cmake_flags]
 toolchain_prefix=flags-gcc
 is_mac && toolchain_prefix=llvm-macos
 case $arch in
-	64 | x86_64*)	toolchain="$toolchain_prefix-x86_64";;
+	64 | x86_64)	toolchain="$toolchain_prefix-x86_64";;
 	ARM64 | arm64)	toolchain="$toolchain_prefix-aarch64";;
 	*)		toolchain="$toolchain_prefix-$arch";;
 esac
@@ -412,6 +409,32 @@ then
 	else
 		echo [-] Not installing dependencies again
 	fi
+
+	cwd_root="$(pwd)"
+
+	# Librashader
+	export RUSTFLAGS="-C target-feature=+crt-static"
+	librashader_profile=release
+	librashader_profile_dir=release
+	# TODO: Handle librashader debug builds for Windows.
+	if [ ! -e "$cache_dir/librashader" ]
+	then
+		mkdir -p $cache_dir/librashader
+		cd $cache_dir/librashader
+		git init
+		git remote add origin https://github.com/SnowflakePowered/librashader/
+		git fetch origin --depth=1 f810cdf6e856e5a5215b1e84a21c978bc3367f23
+		git checkout f810cdf6e856e5a5215b1e84a21c978bc3367f23
+	else
+		cd $cache_dir/librashader
+		git fetch origin --depth=1 f810cdf6e856e5a5215b1e84a21c978bc3367f23
+		git checkout f810cdf6e856e5a5215b1e84a21c978bc3367f23
+	fi
+	cargo build -p librashader-capi --profile $librashader_profile --no-default-features --features runtime-vulkan || exit 99
+	cd $cwd_root
+
+	export CMAKE_LIBRARY_PATH="$cache_dir/librashader/target/$librashader_profile_dir/"
+	cmake_flags_extra="$cmake_flags_extra -D LIBRASHADER_STATIC=ON -D LIBRASHADER_STATIC_FIND_LIB=ON"
 elif is_mac
 then
 	# macOS lacks nproc, but sysctl can do the same job.
@@ -478,17 +501,20 @@ then
 					# Copy or lipo files that exist on both bundles.
 					cat "$cache_dir/universal_listing.txt" | uniq -d | while IFS= read line
 					do
-						if cmp -s "archive_tmp_universal/$merge_src.app/$line" "archive_tmp_universal/$arch_universal.app/$line"
+						path1="archive_tmp_universal/$merge_src.app/$line"
+						path2="archive_tmp_universal/$arch_universal.app/$line"
+						dest="archive_tmp_universal/$merge_dest.app/$line"
+						if cmp -s "$path1" "$path2"
 						then
 							echo "> Identical: $line"
-							cp -p "archive_tmp_universal/$merge_src.app/$line" "archive_tmp_universal/$merge_dest.app/$line"
-						elif lipo -create -output "archive_tmp_universal/$merge_dest.app/$line" "archive_tmp_universal/$merge_src.app/$line" "archive_tmp_universal/$arch_universal.app/$line" 2> /dev/null
+						elif lipo -create -output "$dest" "$path1" "$path2" 2> /dev/null
 						then
 							echo "> Merged: $line"
+							continue
 						else
 							echo "> Copied from [$merge_src]: $line"
-							cp -p "archive_tmp_universal/$merge_src.app/$line" "archive_tmp_universal/$merge_dest.app/$line"
 						fi
+						cp -p "$path1" "$dest"
 					done
 
 					# Merge symlinks.
@@ -512,17 +538,36 @@ then
 							file_src="$arch_universal"
 						fi
 						link_dest="$(readlink "archive_tmp_universal/$file_src.app/$line")"
+						link_path="archive_tmp_universal/$merge_dest.app/$line"
 
 						# Warn if destinations differ.
 						if [ -n "$other_link_dest" -a "$link_dest" != "$other_link_dest" ]
 						then
 							echo "> Symlink: $line => WARNING: different targets"
-							echo ">> Using: [$merge_src] $link_dest"
-							echo ">> Other: [$arch_universal] $other_link_dest"
+
+							# Attempt to lipo the diverging destinations in case they're libraries.
+							if lipo -create -output "$link_path" "archive_tmp_universal/$merge_src.app/$line" "archive_tmp_universal/$arch_universal.app/$line" 2> /dev/null
+							then
+								echo ">> Merged: [$merge_src] $link_dest"
+								echo ">> With: [$arch_universal] $other_link_dest"
+
+								# Point the diverging destinations back to the merged library.
+								for dest in "$link_dest" "$other_link_dest"
+								do
+									ln -s "$dest" "$link_path.tmp"
+									real_dest="$(readlink -f "$link_path.tmp")"
+									rm -f "$real_dest" "$link_path.tmp"
+									ln -s "$link_path" "$real_dest"
+								done
+								continue
+							else
+								echo ">> Using: [$merge_src] $link_dest"
+								echo ">> Other: [$arch_universal] $other_link_dest"
+							fi
 						else
 							echo "> Symlink: $line => $link_dest"
 						fi
-						ln -s "$link_dest" "archive_tmp_universal/$merge_dest.app/$line"
+						ln -s "$link_dest" "$link_path"
 					done
 
 					# Merge a subsequent bundle with this one.
@@ -560,17 +605,18 @@ then
 		fi
 
 		# Notarize the compressed app bundle.
-		mac_notarize "$zip_name"
+		status=0
+		mac_notarize "$zip_name" || status=50
 
 		# All good.
 		echo [-] Universal build of [$package_name] for [$arch] with flags [$cmake_flags] successful
-		exit 0
+		exit $status
 	fi
 
 	# Switch into the correct architecture if required.
 	case $arch in
-		x86_64*) arch_mac="i386"; arch_cmd="x86_64";;
-		*)	 arch_mac="$arch"; arch_cmd="$arch";;
+		x86_64) arch_mac="i386"; arch_cmd="x86_64";;
+		*)	arch_mac="$arch"; arch_cmd="$arch";;
 	esac
 	if [ "$(arch)" != "$arch" -a "$(arch)" != "$arch_mac" ]
 	then
@@ -591,14 +637,8 @@ then
 	[ "$arch" = "x86_64" -a -e "/opt/intel/bin/port" ] && macports="/opt/intel"
 	export PATH="$macports/bin:$macports/sbin:$macports/libexec/qt5/bin:$PATH"
 
-	# Enable MoltenVK on x86_64h and arm64, but not on x86_64.
-	# The rationale behind that is explained on the big comment up top.
-	moltenvk=0
-	if [ "$arch" != "x86_64" ]
-	then
-		moltenvk=1
-		cmake_flags_extra="$cmake_flags_extra -D MOLTENVK=ON -D \"MOLTENVK_INCLUDE_DIR=$macports\""
-	fi
+	# Enable MoltenVK.
+	cmake_flags_extra="$cmake_flags_extra -D MOLTENVK=ON -D \"MOLTENVK_INCLUDE_DIR=$macports\""
 
 	# Enable libserialport.
 	cmake_flags_extra="$cmake_flags_extra -D \"LIBSERIALPORT_ROOT=$macports\""
@@ -609,27 +649,22 @@ then
 		# Install dependencies.
 		echo [-] Installing dependencies through MacPorts
 		sudo "$macports/bin/port" selfupdate
-		if [ $moltenvk -ne 0 ]
-		then
-			# Patch Qt to enable Vulkan support where supported.
-			qt5_portfile="$macports/var/macports/sources/rsync.macports.org/macports/release/tarballs/ports/aqua/qt5/Portfile"
-			sudo sed -i -e 's/-no-feature-vulkan/-feature-vulkan/g' "$qt5_portfile"
-			sudo sed -i -e 's/configure.env-append MAKE=/configure.env-append VULKAN_SDK=${prefix} MAKE=/g' "$qt5_portfile"
-		fi
 
-		# Patch openal-soft to use 1.23.1 on all targets instead of 1.24.2 on >=10.13 only,
-		# to prevent a symlink mismatch from having different versions on x86_64 and arm64.
-		# See: https://github.com/macports/macports-ports/commit/9b4903fc9c76769d476079e404c9a3b8a225f8aa
-		#      https://github.com/macports/macports-ports/commit/788deb64dc0695e8d04afb32ed904947f2a7591b
-		openal_portfile="$macports/var/macports/sources/rsync.macports.org/macports/release/tarballs/ports/audio/openal-soft/Portfile"
-		sudo sed -i -e 's/if {${os.platform} ne "darwin" ||/if {0 \&\&/g' "$openal_portfile"
+		# Patch Qt to enable Vulkan support.
+		qt5_portfile="$macports/var/macports/sources/rsync.macports.org/macports/release/tarballs/ports/aqua/qt5/Portfile"
+		sudo sed -i -e 's/-no-feature-vulkan/-feature-vulkan/g' "$qt5_portfile"
+		sudo sed -i -e 's/configure.env-append MAKE=/configure.env-append VULKAN_SDK=${prefix} MAKE=/g' "$qt5_portfile"
 
 		# Patch wget to remove libproxy support, as it depends on shared-mime-info which
-		# fails to build for a 10.13 target, which we have to do despite wget only being
+		# fails to build for older targets, which we have to do despite wget only being
 		# a host dependency. MacPorts issue 69406 strongly implies this will not be fixed.
 		wget_portfile="$macports/var/macports/sources/rsync.macports.org/macports/release/tarballs/ports/net/wget/Portfile"
 		sudo sed -i -e 's/--enable-libproxy/--disable-libproxy/g' "$wget_portfile"
 		sudo sed -i -e 's/port:libproxy//g' "$wget_portfile"
+
+		# Work around openal-soft failing to build due to C++20. (MacPorts issue 73874)
+		alsoft_portfile="$macports/var/macports/sources/rsync.macports.org/macports/release/tarballs/ports/audio/openal-soft/Portfile"
+		wc -c "$alsoft_portfile" | grep -q ' 6722 ' && sudo sed -i -e 's/configure.args-append/configure.compiler macports-clang-19\nconfigure.args-append/' "$alsoft_portfile"
 
 		while :
 		do
@@ -675,8 +710,15 @@ else
 	esac
         grep -q " bullseye " /etc/apt/sources.list || echo [!] WARNING: System not running the expected Debian version
 
+	# Giant hack because Debian Bullseye ships with ancient headers.
+	cd src/include
+	git clone --depth 1 https://github.com/KhronosGroup/vulkan-headers.git || exit 99
+	ln -sf vulkan-headers/include/vulkan vulkan
+	ln -sf vulkan-headers/include/vk_video vk_video
+	cd ../../
+
 	# Establish general dependencies.
-	pkgs="cmake ninja-build pkg-config git wget p7zip-full extra-cmake-modules wayland-protocols tar gzip file appstream qttranslations5-l10n python3-pip python3-venv squashfs-tools"
+	pkgs="cmake ninja-build pkg-config git wget p7zip-full extra-cmake-modules wayland-protocols tar gzip file appstream qttranslations5-l10n python3-pip python3-venv squashfs-tools curl"
 	if [ "$(dpkg --print-architecture)" = "$arch_deb" ]
 	then
 		pkgs="$pkgs build-essential"
@@ -699,7 +741,7 @@ else
 	# ...and the ones we do want listed. Non-dev packages fill missing spots on the list.
 	libpkgs=""
 	longest_libpkg=0
-	for pkg in libc6-dev libstdc++6 libopenal-dev libfreetype6-dev libx11-dev libsdl2-dev libpng-dev librtmidi-dev qtdeclarative5-dev libwayland-dev libevdev-dev libxkbcommon-x11-dev libglib2.0-dev libslirp-dev libfaudio-dev libaudio-dev libjack-jackd2-dev libpipewire-0.3-dev libsamplerate0-dev libsndio-dev libvdeplug-dev libfluidsynth-dev libsndfile1-dev libinstpatch-dev libserialport-dev
+	for pkg in libc6-dev libstdc++6 libopenal-dev libfreetype6-dev libx11-dev libsdl2-dev libpng-dev librtmidi-dev qtdeclarative5-dev libwayland-dev libevdev-dev libxkbcommon-x11-dev libglib2.0-dev libslirp-dev libaudio-dev libjack-jackd2-dev libpipewire-0.3-dev libsamplerate0-dev libsndio-dev libvdeplug-dev libfluidsynth-dev libsndfile1-dev libserialport-dev libvncserver-dev libzstd-dev
 	do
 		libpkgs="$libpkgs $pkg:$arch_deb"
 		length=$(echo -n $pkg | sed 's/-dev$//' | sed "s/qtdeclarative/qt/" | wc -c)
@@ -776,6 +818,18 @@ EOF
 	else
 		echo [-] Not installing dependencies again
 	fi
+
+	if dpkg -s rustc-web
+	then
+		sudo apt-get purge -y rustc-web cargo-web
+		rm -rf "$HOME/.cargo/bin"
+	fi
+	if [ ! -e "$HOME/.cargo/bin" ]
+	then
+		curl -sSf https://sh.rustup.rs | sh -s -- -y
+	fi
+	cmake_flags_extra="$cmake_flags_extra -D Rust_RUSTUP_INSTALL_MISSING_TARGET=ON"
+	export PATH="$HOME/.cargo/bin/:$PATH"
 fi
 
 # Point CMake to the toolchain file.
@@ -787,7 +841,7 @@ rm -rf build
 
 # Add ARCH to skip the arch_detect process.
 case $arch in
-	64 | x86_64*)	cmake_flags_extra="$cmake_flags_extra -D ARCH=x86_64";;
+	64 | x86_64)	cmake_flags_extra="$cmake_flags_extra -D ARCH=x86_64";;
 	ARM64 | arm64)	cmake_flags_extra="$cmake_flags_extra -D ARCH=arm64 -D NEW_DYNAREC=ON";;
 	*)		cmake_flags_extra="$cmake_flags_extra -D \"ARCH=$arch\"";;
 esac
@@ -867,7 +921,7 @@ fi
 # Determine Discord Game SDK architecture.
 case $arch in
 	32)		arch_discord="x86";;
-	64 | x86_64*)	arch_discord="x86_64";;
+	64 | x86_64)	arch_discord="x86_64";;
 	arm64 | ARM64)	arch_discord="aarch64";;
 	*)		arch_discord="$arch";;
 esac
@@ -908,14 +962,81 @@ then
 fi
 
 # Build mdsx library.
+prefix="$cache_dir/mdsx"
 debug_args=
 grep -qiE "^CMAKE_BUILD_TYPE:[^=]+=Debug" build/CMakeCache.txt && debug_args=DEBUG=y
-cd archive_tmp
-git clone --depth 1 "$(dirname "$git_repo")/mdsx.git" mdsx || exit 99
-make -C mdsx/src -j$(nproc) CC="$cc_binary" STRIP="$strip_binary" $debug_args || exit 99
-mv mdsx/src/mdsx.* . || exit 99
-rm -rf mdsx
-cd ..
+if [ -e "$prefix/src/Makefile" ]
+then
+	if ! check_buildtag mdsx
+	then
+		git -C "$prefix" clean -dfx
+		git -C "$prefix" reset --hard HEAD
+		for retry in 0 5 10 20 40
+		do
+			sleep $retry
+			git -C "$prefix" pull && break
+		done
+		save_buildtag mdsx
+	fi
+else
+	rm -rf "$prefix"
+	for retry in 0 5 10 20 40
+	do
+		sleep $retry
+		git clone --depth 1 "$(dirname "$git_repo")/mdsx.git" "$prefix" && break
+	done
+fi
+make -C "$prefix/src" -j$(nproc) CC="$cc_binary" STRIP="$strip_binary" $debug_args || exit 99
+find "$prefix/src" -name '*.[oa]' -delete
+mv "$prefix/src/mdsx."* archive_tmp/ || exit 99
+
+# Build libaaruformat library.
+prefix="$cache_dir/libaaruformat"
+debug_args=
+grep -qiE "^CMAKE_BUILD_TYPE:[^=]+=Debug" build/CMakeCache.txt && debug_args=DEBUG=y
+if [ -e "$prefix/src/close.c" ]
+then
+	if ! check_buildtag libaaruformat
+	then
+		git -C "$prefix" clean -dfx
+		git -C "$prefix" reset --recurse-submodules --hard HEAD
+		for retry in 0 5 10 20 40
+		do
+			sleep $retry
+			git -C "$prefix" pull && break
+		done
+		save_buildtag libaaruformat
+	fi
+else
+	rm -rf "$prefix"
+	for retry in 0 5 10 20 40
+	do
+		sleep $retry
+		git clone --recurse-submodules --no-shallow-submodules --remote-submodules "https://github.com/obattler/libaaruformat" "$prefix" && break
+	done
+fi
+cwd_root="$(pwd)"
+cd $prefix/src
+echo Now in $prefix/src
+cmake -B build -S .. -DCMAKE_BUILD_TYPE=Release -DBUILD_TOOL=1 -DAARU_BUILD_PACKAGE=ON || exit 99
+cmake --build build -j$(nproc) || exit 99
+status=0
+if is_windows
+then
+  mv "build/libaaruformat.dll" $cwd_root/archive_tmp/ || status=1
+elif is_mac
+then
+  mv "build/libaaruformat.dylib" $cwd_root/archive_tmp/ || status=1
+else
+  mv "build/libaaruformat.so" $cwd_root/archive_tmp/ || status=1
+fi
+rm -rf build
+if [ $status -eq 1 ]
+then
+  exit 99
+fi
+cd $cwd_root
+echo Now back in $cwd_root
 
 # Archive the executable and its dependencies.
 # The executable should always be archived last for the check after this block.
@@ -929,17 +1050,17 @@ then
 	[ "$arch" = "32" -a -d "/c/Program Files (x86)" ] && pf="/c/Program Files (x86)"
 
 	# Archive Ghostscript DLL from local official distribution installation.
-	for gs in "$pf"/gs/gs*.*.*
-	do
-		cp -p "$gs"/bin/gsdll*.dll archive_tmp/
-	done
+	if [ "$arch" != "ARM64" -a "$arch" != "arm64" ]
+	then
+		for gs in "$pf"/gs/gs*.*.*
+		do
+			cp -p "$gs"/bin/gsdll*.dll archive_tmp/
+		done
+	fi
 
 	# Archive Discord Game SDK DLL.
 	"$sevenzip" e -y -o"archive_tmp" "$discord_zip" "lib/$arch_discord/discord_game_sdk.dll"
 	[ ! -e "archive_tmp/discord_game_sdk.dll" ] && echo [!] No Discord Game SDK for architecture [$arch_discord]
-
-	# Archive XAudio2 DLL if required.
-	grep -qiE "^OPENAL:BOOL=ON" build/CMakeCache.txt || cp -p "/home/$project/dll$arch/xaudio2"* archive_tmp/
 
 	# Archive executable, while also stripping it if requested.
 	if [ $strip -ne 0 ]
@@ -952,6 +1073,7 @@ then
 	fi
 elif is_mac
 then
+	cwd_root="$(pwd)"
 	# Archive app bundle with libraries.
 	cmake_flags_install=
 	[ $strip -ne 0 ] && cmake_flags_install="$cmake_flags_install --strip"
@@ -967,49 +1089,41 @@ then
 		# Archive mdsx library.
 		mv "archive_tmp/mdsx.dylib" "archive_tmp/"*".app/Contents/Frameworks/"
 
-		# Hack to convert x86_64 binaries to x86_64h when building that architecture.
-		if [ "$arch" = "x86_64h" ]
+		# Archive libaaruformat library.
+		mv "archive_tmp/libaaruformat.dylib" "archive_tmp/"*".app/Contents/Frameworks/"
+
+		# Librashader
+		librashader_profile=release
+		librashader_profile_dir=release
+		grep -qiE "^CMAKE_BUILD_TYPE:[^=]+=Debug" build/CMakeCache.txt && librashader_profile=dev && librashader_profile_dir=debug
+		if [ ! -e "$cache_dir/librashader" ]
 		then
-			find archive_tmp -type f | while IFS= read line
-			do
-				# Parse and patch a fat header (0xCAFEBABE, big endian) first.
-				macho_offset=0
-				if [ "$(dd if="$line" bs=1 count=4 status=none)" = "$(printf '\xCA\xFE\xBA\xBE')" ]
-				then
-					# Get the number of fat architectures.
-					fat_archs=$(($(dd if="$line" bs=1 skip=4 count=4 status=none | rev | tr -d '\n' | od -An -vtu4)))
-
-					# Go through fat architectures.
-					fat_offset=8
-					for fat_arch in $(seq 1 $fat_archs)
-					do
-						# Check CPU type.
-						if [ "$(dd if="$line" bs=1 skip=$fat_offset count=4 status=none)" = "$(printf '\x01\x00\x00\x07')" ]
-						then
-							# Change CPU subtype in the fat header from ALL (0x00000003) to H (0x00000008).
-							printf '\x00\x00\x00\x08' | dd of="$line" bs=1 seek=$((fat_offset + 4)) count=4 conv=notrunc status=none
-
-							# Save offset for this architecture's Mach-O header.
-							macho_offset=$(($(dd if="$line" bs=1 skip=$((fat_offset + 8)) count=4 status=none | rev | tr -d '\n' | od -An -vtu4)))
-
-							# Stop looking for the x86_64 slice.
-							break
-						fi
-
-						# Move on to the next architecture.
-						fat_offset=$((fat_offset + 20))
-					done
-				fi
-
-				# Now patch a 64-bit Mach-O header (0xFEEDFACF, little endian), either at
-				# the beginning or as a sub-header within a fat binary as parsed above.
-				if [ "$(dd if="$line" bs=1 skip=$macho_offset count=8 status=none)" = "$(printf '\xCF\xFA\xED\xFE\x07\x00\x00\x01')" ]
-				then
-					# Change CPU subtype in the Mach-O header from ALL (0x00000003) to H (0x00000008).
-					printf '\x08\x00\x00\x00' | dd of="$line" bs=1 seek=$((macho_offset + 8)) count=4 conv=notrunc status=none
-				fi
-			done
+			mkdir -p $cache_dir/librashader
+			cd $cache_dir/librashader
+			git init
+			git remote add origin https://github.com/SnowflakePowered/librashader/
+			git fetch origin --depth=1 f810cdf6e856e5a5215b1e84a21c978bc3367f23
+			git checkout f810cdf6e856e5a5215b1e84a21c978bc3367f23
+		else
+			cd $cache_dir/librashader
+			git fetch origin --depth=1 f810cdf6e856e5a5215b1e84a21c978bc3367f23
+			git checkout f810cdf6e856e5a5215b1e84a21c978bc3367f23
 		fi
+		case $arch in
+			64 | x86_64)	cargo build -p librashader-capi --target=x86_64-apple-darwin --profile $librashader_profile --no-default-features --features runtime-vulkan || exit 99;;
+			ARM64 | arm64)	cargo build -p librashader-capi --target=aarch64-apple-darwin --profile $librashader_profile --no-default-features --features runtime-vulkan || exit 99;;
+			*)		cargo build -p librashader-capi --profile $librashader_profile --no-default-features --features runtime-vulkan || exit 99;;
+		esac
+		case $arch in
+			64 | x86_64) cd target/x86_64-apple-darwin/$librashader_profile_dir/;;
+			ARM64 | arm64) cd target/aarch64-apple-darwin/$librashader_profile_dir/;;
+			*) cd target/$librashader_profile/;;
+		esac
+		cp liblibrashader_capi.dylib $cwd_root/archive_tmp/librashader.dylib
+		cd $cwd_root
+
+	  	# Archive librashader library.
+		mv "archive_tmp/librashader.dylib" "archive_tmp/"*".app/Contents/Frameworks/"
 
 		# Archive assets.
 		if [ -d archive_tmp/assets ]
@@ -1028,47 +1142,25 @@ then
 	fi
 else
 	cwd_root="$(pwd)"
-	check_buildtag "libs.$arch_deb"
 
-	if grep -qiE "^OPENAL:BOOL=ON" build/CMakeCache.txt
+	# Build openal-soft 1.23.1 manually to fix audio issues. This is a temporary
+	# workaround until a newer version of openal-soft trickles down to Debian repos.
+	# Newer versions require C++20 which our current environment doesn't support.
+	prefix="$cache_dir/openal-soft-1.23.1"
+	if [ ! -d "$prefix" ]
 	then
-		# Build openal-soft 1.23.1 manually to fix audio issues. This is a temporary
-		# workaround until a newer version of openal-soft trickles down to Debian repos.
-		prefix="$cache_dir/openal-soft-1.23.1"
-		if [ ! -d "$prefix" ]
-		then
-			rm -rf "$cache_dir/openal-soft-"* # remove old versions
-			wget -qO - https://github.com/kcat/openal-soft/archive/refs/tags/1.23.1.tar.gz | tar zxf - -C "$cache_dir" || rm -rf "$prefix"
-		fi
-
-		# Patches to build with the old PipeWire version in Debian.
-		sed -i -e 's/>=0.3.23//' "$prefix/CMakeLists.txt"
-		sed -i -e 's/PW_KEY_CONFIG_NAME/"config.name"/g' "$prefix/alc/backends/pipewire.cpp"
-
-		prefix_build="$prefix/build-$arch_deb"
-		cmake -G Ninja -D "CMAKE_TOOLCHAIN_FILE=$toolchain_file_libs" -D "CMAKE_INSTALL_PREFIX=$cwd_root/archive_tmp/usr" -S "$prefix" -B "$prefix_build" || exit 99
-		cmake --build "$prefix_build" -j$(nproc) || exit 99
-		cmake --install "$prefix_build" || exit 99
-
-		# Build SDL2 without sound systems.
-		sdl_ss=OFF
-	else
-		# Build FAudio 22.03 manually to remove the dependency on GStreamer. This is a temporary
-		# workaround until a newer version of FAudio trickles down to Debian repos.
-		prefix="$cache_dir/FAudio-22.03"
-		if [ ! -d "$prefix" ]
-		then
-			rm -rf "$cache_dir/FAudio-"* # remove old versions
-			wget -qO - https://github.com/FNA-XNA/FAudio/archive/refs/tags/22.03.tar.gz | tar zxf - -C "$cache_dir" || rm -rf "$prefix"
-		fi
-		prefix_build="$prefix/build-$arch_deb"
-		cmake -G Ninja -D "CMAKE_TOOLCHAIN_FILE=$toolchain_file_libs" -D "CMAKE_INSTALL_PREFIX=$cwd_root/archive_tmp/usr" -S "$prefix" -B "$prefix_build" || exit 99
-		cmake --build "$prefix_build" -j$(nproc) || exit 99
-		cmake --install "$prefix_build" || exit 99
-
-		# Build SDL2 with sound systems.
-		sdl_ss=ON
+		rm -rf "$cache_dir/openal-soft-"* # remove old versions
+		wget -qO - https://github.com/kcat/openal-soft/archive/refs/tags/1.23.1.tar.gz | tar zxf - -C "$cache_dir" || rm -rf "$prefix"
 	fi
+
+	# Patches to build with the old PipeWire version in Debian.
+	sed -i -e 's/>=0.3.23//' "$prefix/CMakeLists.txt"
+	sed -i -e 's/PW_KEY_CONFIG_NAME/"config.name"/g' "$prefix/alc/backends/pipewire.cpp"
+
+	prefix_build="$prefix/build-$arch_deb"
+	cmake -G Ninja -D "CMAKE_TOOLCHAIN_FILE=$toolchain_file_libs" -D "CMAKE_INSTALL_PREFIX=$cwd_root/archive_tmp/usr" -S "$prefix" -B "$prefix_build" || exit 99
+	cmake --build "$prefix_build" -j$(nproc) || exit 99
+	cmake --install "$prefix_build" || exit 99
 
 	# Build SDL2 with video systems (and dependencies) only if the SDL interface is used.
 	sdl_ui=OFF
@@ -1076,6 +1168,7 @@ else
 
 	# Build rtmidi without JACK support to remove the dependency on libjack, as
 	# the Debian libjack is very likely to be incompatible with the system jackd.
+	# Newer versions are ABI incompatible and require newer CMake.
 	prefix="$cache_dir/rtmidi-4.0.0"
 	if [ ! -d "$prefix" ]
 	then
@@ -1089,36 +1182,37 @@ else
 
 	# Build FluidSynth without sound systems to remove the dependencies on libjack
 	# and other sound system libraries. We don't output audio through FluidSynth.
-	prefix="$cache_dir/fluidsynth-2.3.0"
+	prefix="$cache_dir/fluidsynth-2.5.3"
 	if [ ! -d "$prefix" ]
 	then
 		rm -rf "$cache_dir/fluidsynth-"* # remove old versions
-		wget -qO - https://github.com/FluidSynth/fluidsynth/archive/refs/tags/v2.3.0.tar.gz | tar zxf - -C "$cache_dir" || rm -rf "$prefix"
+		wget -qO - https://github.com/FluidSynth/fluidsynth/archive/refs/tags/v2.5.3.tar.gz | tar zxf - -C "$cache_dir" || rm -rf "$prefix"
 	fi
+	sed -i -e 's/SndFile_WITH_EXTERNAL_LIBS/1/g' "$prefix/CMakeLists.txt" # patch to enable sf3 support with old libsndfile
 	prefix_build="$prefix/build-$arch_deb"
 	cmake -G Ninja -D enable-jack=OFF -D enable-oss=OFF -D enable-sdl2=OFF -D enable-pulseaudio=OFF -D enable-pipewire=OFF -D enable-alsa=OFF \
-		-D enable-aufile=OFF -D enable-dbus=OFF -D enable-network=OFF -D enable-ipv6=OFF \
+		-D SndFile_WITH_EXTERNAL_LIBS=ON -D enable-aufile=OFF -D enable-dbus=OFF -D enable-network=OFF -D enable-ipv6=OFF \
 		-D "CMAKE_TOOLCHAIN_FILE=$toolchain_file_libs" -D "CMAKE_INSTALL_PREFIX=$cwd_root/archive_tmp/usr" \
 		-S "$prefix" -B "$prefix_build" || exit 99
 	cmake --build "$prefix_build" -j$(nproc) || exit 99
 	cmake --install "$prefix_build" || exit 99
 
-	# Build SDL2 for joystick and FAudio support, with most components
+	# Build SDL2 for joystick support, with most components
 	# disabled to remove the dependencies on PulseAudio and libdrm.
-	prefix="$cache_dir/SDL2-2.0.20"
+	prefix="$cache_dir/SDL2-2.32.10"
 	if [ ! -d "$prefix" ]
 	then
 		rm -rf "$cache_dir/SDL2-"* # remove old versions
-		wget -qO - https://www.libsdl.org/release/SDL2-2.0.20.tar.gz | tar zxf - -C "$cache_dir" || rm -rf "$prefix"
+		wget -qO - https://www.libsdl.org/release/SDL2-2.32.10.tar.gz | tar zxf - -C "$cache_dir" || rm -rf "$prefix"
 	fi
-	prefix_build="$cache_dir/SDL2-2.0.20-build-$arch_deb"
+	prefix_build="$cache_dir/SDL2-2.32.10-build-$arch_deb"
 	cmake -G Ninja -D SDL_SHARED=ON -D SDL_STATIC=OFF \
 		\
-		-D SDL_AUDIO=$sdl_ss -D SDL_DUMMYAUDIO=$sdl_ss -D SDL_DISKAUDIO=OFF -D SDL_OSS=OFF -D SDL_ALSA=$sdl_ss -D SDL_ALSA_SHARED=$sdl_ss \
-		-D SDL_JACK=$sdl_ss -D SDL_JACK_SHARED=$sdl_ss -D SDL_ESD=OFF -D SDL_ESD_SHARED=OFF -D SDL_PIPEWIRE=$sdl_ss \
-		-D SDL_PIPEWIRE_SHARED=$sdl_ss -D SDL_PULSEAUDIO=$sdl_ss -D SDL_PULSEAUDIO_SHARED=$sdl_ss -D SDL_ARTS=OFF -D SDL_ARTS_SHARED=OFF \
-		-D SDL_NAS=$sdl_ss -D SDL_NAS_SHARED=$sdl_ss -D SDL_SNDIO=$sdl_ss -D SDL_SNDIO_SHARED=$sdl_ss -D SDL_FUSIONSOUND=OFF \
-		-D SDL_FUSIONSOUND_SHARED=OFF -D SDL_LIBSAMPLERATE=$sdl_ss -D SDL_LIBSAMPLERATE_SHARED=$sdl_ss \
+		-D SDL_AUDIO=OFF -D SDL_DUMMYAUDIO=OFF -D SDL_DISKAUDIO=OFF -D SDL_OSS=OFF -D SDL_ALSA=OFF -D SDL_ALSA_SHARED=OFF \
+		-D SDL_JACK=OFF -D SDL_JACK_SHARED=OFF -D SDL_ESD=OFF -D SDL_ESD_SHARED=OFF -D SDL_PIPEWIRE=OFF \
+		-D SDL_PIPEWIRE_SHARED=OFF -D SDL_PULSEAUDIO=OFF -D SDL_PULSEAUDIO_SHARED=OFF -D SDL_ARTS=OFF -D SDL_ARTS_SHARED=OFF \
+		-D SDL_NAS=OFF -D SDL_NAS_SHARED=OFF -D SDL_SNDIO=OFF -D SDL_SNDIO_SHARED=OFF -D SDL_FUSIONSOUND=OFF \
+		-D SDL_FUSIONSOUND_SHARED=OFF -D SDL_LIBSAMPLERATE=OFF -D SDL_LIBSAMPLERATE_SHARED=OFF \
 		\
 		-D SDL_VIDEO=$sdl_ui -D SDL_X11=$sdl_ui -D SDL_X11_SHARED=$sdl_ui -D SDL_WAYLAND=$sdl_ui -D SDL_WAYLAND_SHARED=$sdl_ui \
 		-D SDL_WAYLAND_LIBDECOR=$sdl_ui -D SDL_WAYLAND_LIBDECOR_SHARED=$sdl_ui -D SDL_WAYLAND_QT_TOUCH=OFF -D SDL_RPI=OFF -D SDL_VIVANTE=OFF \
@@ -1152,8 +1246,8 @@ else
 	7z e -y -o"archive_tmp/usr/lib" "$discord_zip" "lib/$arch_discord/discord_game_sdk.so"
 	[ ! -e "archive_tmp/usr/lib/discord_game_sdk.so" ] && echo [!] No Discord Game SDK for architecture [$arch_discord]
 
-	# Archive mdsx library.
-	mv "archive_tmp/mdsx.so" "archive_tmp/usr/lib/"
+	# Archive libaaruformat library.
+	mv "archive_tmp/libaaruformat.so" "archive_tmp/usr/lib/"
 
 	# Archive readme with library package versions.
 	echo Libraries used to compile this $arch build of $project: > archive_tmp/README
@@ -1192,6 +1286,31 @@ else
 		mkdir -p "$data_dir"
 		mv archive_tmp/assets "$data_dir/assets"
 	fi
+
+	# Librashader
+	librashader_profile=release
+	librashader_profile_dir=release
+	grep -qiE "^CMAKE_BUILD_TYPE:[^=]+=Debug" build/CMakeCache.txt && librashader_profile=dev && librashader_profile_dir=debug
+	if [ ! -e "$cache_dir/librashader" ]
+	then
+		mkdir -p $cache_dir/librashader
+		cd $cache_dir/librashader
+		git init
+		git remote add origin https://github.com/SnowflakePowered/librashader/
+		git fetch origin --depth=1 f810cdf6e856e5a5215b1e84a21c978bc3367f23
+		git checkout f810cdf6e856e5a5215b1e84a21c978bc3367f23
+	else
+		cd $cache_dir/librashader
+		git fetch origin --depth=1 f810cdf6e856e5a5215b1e84a21c978bc3367f23
+		git checkout f810cdf6e856e5a5215b1e84a21c978bc3367f23
+	fi
+	cargo build -p librashader-capi --profile $librashader_profile --no-default-features --features runtime-vulkan || exit 99
+	cd target/$librashader_profile_dir/
+	cp liblibrashader_capi.so $cwd_root/archive_tmp/librashader.so
+	cd $cwd_root
+
+	# Archive librashader library.
+	mv "archive_tmp/librashader.so" "archive_tmp/usr/lib/"
 
 	# Archive executable, while also stripping it if requested.
 	mkdir -p archive_tmp/usr/local/bin
@@ -1307,8 +1426,9 @@ then
 fi
 
 # Notarize the compressed app bundle if we're on macOS.
-is_mac && mac_notarize "$zip_name"
+status=0
+mac_notarize "$zip_name" || status=50
 
 # All good.
 echo [-] Build of [$package_name] for [$arch] with flags [$cmake_flags] successful
-exit 0
+exit $status

@@ -438,9 +438,9 @@ voodoo_readl(uint32_t addr, void *priv)
                     int busy         = (written - voodoo->cmd_read) ||
                                (voodoo->cmdfifo_depth_rd != voodoo->cmdfifo_depth_wr) ||
                                voodoo->voodoo_busy ||
-                               voodoo->render_voodoo_busy[0] ||
-                               (voodoo->render_threads >= 2 && voodoo->render_voodoo_busy[1]) ||
-                               (voodoo->render_threads == 4 && (voodoo->render_voodoo_busy[2] || voodoo->render_voodoo_busy[3]));
+                               RENDER_VOODOO_BUSY(voodoo, 0) ||
+                               (voodoo->render_threads >= 2 && RENDER_VOODOO_BUSY(voodoo, 1)) ||
+                               (voodoo->render_threads == 4 && (RENDER_VOODOO_BUSY(voodoo, 2) || RENDER_VOODOO_BUSY(voodoo, 3)));
 
                     if (SLI_ENABLED && voodoo->type != VOODOO_2) {
                         voodoo_t *voodoo_other  = (voodoo == voodoo->set->voodoos[0]) ? voodoo->set->voodoos[1] : voodoo->set->voodoos[0];
@@ -453,9 +453,9 @@ voodoo_readl(uint32_t addr, void *priv)
                         if ((other_written - voodoo_other->cmd_read) ||
                             (voodoo_other->cmdfifo_depth_rd != voodoo_other->cmdfifo_depth_wr) ||
                             voodoo_other->voodoo_busy ||
-                            voodoo_other->render_voodoo_busy[0] ||
-                            (voodoo_other->render_threads >= 2 && voodoo_other->render_voodoo_busy[1]) ||
-                            (voodoo_other->render_threads == 4 && (voodoo_other->render_voodoo_busy[2] || voodoo_other->render_voodoo_busy[3])))
+                            RENDER_VOODOO_BUSY(voodoo_other, 0) ||
+                            (voodoo_other->render_threads >= 2 && RENDER_VOODOO_BUSY(voodoo_other, 1)) ||
+                            (voodoo_other->render_threads == 4 && (RENDER_VOODOO_BUSY(voodoo_other, 2) || RENDER_VOODOO_BUSY(voodoo_other, 3))))
                             busy = 1;
                         if (!voodoo_other->voodoo_busy)
                             voodoo_wake_fifo_thread(voodoo_other);
@@ -1005,7 +1005,7 @@ voodoo_recalcmapping(voodoo_set_t *set)
 }
 
 uint8_t
-voodoo_pci_read(int func, int addr, void *priv)
+voodoo_pci_read(int func, int addr, UNUSED(int len), void *priv)
 {
     const voodoo_t *voodoo = (voodoo_t *) priv;
 
@@ -1069,7 +1069,7 @@ voodoo_pci_read(int func, int addr, void *priv)
 }
 
 void
-voodoo_pci_write(int func, int addr, uint8_t val, void *priv)
+voodoo_pci_write(int func, int addr, UNUSED(int len), uint8_t val, void *priv)
 {
     voodoo_t *voodoo = (voodoo_t *) priv;
 
@@ -1154,8 +1154,7 @@ void *
 voodoo_card_init(void)
 {
     int       c;
-    voodoo_t *voodoo = malloc(sizeof(voodoo_t));
-    memset(voodoo, 0, sizeof(voodoo_t));
+    voodoo_t *voodoo = calloc(1, sizeof(voodoo_t));
 
     voodoo_init_relax_settings(voodoo);
     voodoo->bilinear_enabled  = device_get_config_int("bilinear");
@@ -1195,19 +1194,19 @@ voodoo_card_init(void)
 
     mem_mapping_add(&voodoo->mapping, 0, 0, NULL, voodoo_readw, voodoo_readl, NULL, voodoo_writew, voodoo_writel, NULL, MEM_MAPPING_EXTERNAL, voodoo);
 
-    voodoo->fb_mem     = malloc(4 * 1024 * 1024);
-    voodoo->tex_mem[0] = malloc(voodoo->texture_size * 1024 * 1024);
+    voodoo->fb_mem     = calloc(1, 4 * 1024 * 1024);
+    voodoo->tex_mem[0] = calloc(1, voodoo->texture_size * 1024 * 1024);
     if (voodoo->dual_tmus)
-        voodoo->tex_mem[1] = malloc(voodoo->texture_size * 1024 * 1024);
+        voodoo->tex_mem[1] = calloc(1, voodoo->texture_size * 1024 * 1024);
     voodoo->tex_mem_w[0] = (uint16_t *) voodoo->tex_mem[0];
     voodoo->tex_mem_w[1] = (uint16_t *) voodoo->tex_mem[1];
 
     for (c = 0; c < TEX_CACHE_MAX; c++) {
-        voodoo->texture_cache[0][c].data     = malloc((256 * 256 + 256 * 256 + 128 * 128 + 64 * 64 + 32 * 32 + 16 * 16 + 8 * 8 + 4 * 4 + 2 * 2) * 4);
+        voodoo->texture_cache[0][c].data     = calloc(1, (256 * 256 + 256 * 256 + 128 * 128 + 64 * 64 + 32 * 32 + 16 * 16 + 8 * 8 + 4 * 4 + 2 * 2) * 4);
         voodoo->texture_cache[0][c].base     = -1; /*invalid*/
         voodoo->texture_cache[0][c].refcount = 0;
         if (voodoo->dual_tmus) {
-            voodoo->texture_cache[1][c].data     = malloc((256 * 256 + 256 * 256 + 128 * 128 + 64 * 64 + 32 * 32 + 16 * 16 + 8 * 8 + 4 * 4 + 2 * 2) * 4);
+            voodoo->texture_cache[1][c].data     = calloc(1, (256 * 256 + 256 * 256 + 128 * 128 + 64 * 64 + 32 * 32 + 16 * 16 + 8 * 8 + 4 * 4 + 2 * 2) * 4);
             voodoo->texture_cache[1][c].base     = -1; /*invalid*/
             voodoo->texture_cache[1][c].refcount = 0;
         }
@@ -1318,8 +1317,7 @@ void *
 voodoo_2d3d_card_init(int type)
 {
     int       c;
-    voodoo_t *voodoo = malloc(sizeof(voodoo_t));
-    memset(voodoo, 0, sizeof(voodoo_t));
+    voodoo_t *voodoo = calloc(1, sizeof(voodoo_t));
 
     voodoo_init_relax_settings(voodoo);
     voodoo->bilinear_enabled  = device_get_config_int("bilinear");
@@ -1337,11 +1335,11 @@ voodoo_2d3d_card_init(int type)
     voodoo_generate_filter_v2(voodoo);
 
     for (c = 0; c < TEX_CACHE_MAX; c++) {
-        voodoo->texture_cache[0][c].data     = malloc((256 * 256 + 256 * 256 + 128 * 128 + 64 * 64 + 32 * 32 + 16 * 16 + 8 * 8 + 4 * 4 + 2 * 2) * 4);
+        voodoo->texture_cache[0][c].data     = calloc(1, (256 * 256 + 256 * 256 + 128 * 128 + 64 * 64 + 32 * 32 + 16 * 16 + 8 * 8 + 4 * 4 + 2 * 2) * 4);
         voodoo->texture_cache[0][c].base     = -1; /*invalid*/
         voodoo->texture_cache[0][c].refcount = 0;
         if (voodoo->dual_tmus) {
-            voodoo->texture_cache[1][c].data     = malloc((256 * 256 + 256 * 256 + 128 * 128 + 64 * 64 + 32 * 32 + 16 * 16 + 8 * 8 + 4 * 4 + 2 * 2) * 4);
+            voodoo->texture_cache[1][c].data     = calloc(1, (256 * 256 + 256 * 256 + 128 * 128 + 64 * 64 + 32 * 32 + 16 * 16 + 8 * 8 + 4 * 4 + 2 * 2) * 4);
             voodoo->texture_cache[1][c].base     = -1; /*invalid*/
             voodoo->texture_cache[1][c].refcount = 0;
         }
@@ -1450,10 +1448,9 @@ voodoo_2d3d_card_init(int type)
 void *
 voodoo_init(UNUSED(const device_t *info))
 {
-    voodoo_set_t *voodoo_set = malloc(sizeof(voodoo_set_t));
+    voodoo_set_t *voodoo_set = calloc(1, sizeof(voodoo_set_t));
     uint32_t      tmuConfig  = 1;
     int           type;
-    memset(voodoo_set, 0, sizeof(voodoo_set_t));
 
     type = device_get_config_int("type");
 

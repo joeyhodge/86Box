@@ -747,6 +747,37 @@ d86f_hole(int drive)
     return (d86f_handler[drive].disk_flags(drive) >> 1) & 3;
 }
 
+void
+d86f_set_track_pos(const int drive, const uint32_t track_pos)
+{
+    d86f_t    *dev = d86f[drive];
+
+    if (dev != NULL)
+        dev->track_pos = track_pos;
+}
+
+uint32_t
+d86f_get_track_pos(const int drive)
+{
+    const d86f_t *dev = d86f[drive];
+
+    if (dev == NULL)
+        return 0;
+
+    return dev->track_pos;
+}
+
+uint32_t
+d86f_get_raw_size(const int drive, const int side)
+{
+    const d86f_t *dev = d86f[drive];
+
+    if (dev == NULL)
+        return 12500;
+
+    return d86f_handler[drive].get_raw_size(drive, side);
+}
+
 uint8_t
 d86f_get_encoding(int drive)
 {
@@ -2367,7 +2398,10 @@ d86f_turbo_poll(int drive, int side)
         case STATE_16_FIND_ID:
             if (!d86f_sector_is_present(drive, side, dev->req_sector.id.c, dev->req_sector.id.h, dev->req_sector.id.r, dev->req_sector.id.n)) {
                 dev->id_find.sync_marks = dev->id_find.bits_obtained = dev->id_find.bytes_obtained = dev->error_condition = 0;
-                fdc_nosector(d86f_fdc);
+                if (d86f_sector_is_present(drive, side, d86f_fdc->pcn[dev->req_sector.id.h], dev->req_sector.id.h, dev->req_sector.id.r, dev->req_sector.id.n))
+                    fdc_wrongcylinder(d86f_fdc);
+                else
+                    fdc_nosector(d86f_fdc);
                 dev->state = STATE_IDLE;
                 return;
             } else if (d86f_sector_flags(drive, side, dev->req_sector.id.c, dev->req_sector.id.h, dev->req_sector.id.r, dev->req_sector.id.n) & SECTOR_NO_ID) {
@@ -3196,7 +3230,7 @@ d86f_writeback(int drive)
         /* The image is compressed. */
 
         /* Open the original, compressed file. */
-        cf = plat_fopen(dev->original_file_name, L"wb");
+        cf = plat_fopen(dev->original_file_name, "wb");
 
         /* Write the header to the original file. */
         fwrite(header, 1, header_size, cf);
@@ -3208,8 +3242,8 @@ d86f_writeback(int drive)
         fseek(dev->fp, header_size, SEEK_SET);
 
         /* Compress data from the temporary uncompressed file to the original, compressed file. */
-        dev->filebuf = (uint8_t *) malloc(len);
-        dev->outbuf  = (uint8_t *) malloc(len - 1);
+        dev->filebuf = (uint8_t *) calloc(1, len);
+        dev->outbuf  = (uint8_t *) calloc(1, len - 1);
         fread(dev->filebuf, 1, len, dev->fp);
         ret = lzf_compress(dev->filebuf, len, dev->outbuf, len - 1);
 
@@ -3516,7 +3550,7 @@ d86f_export(int drive, char *fn)
         return 0;
 
     /* Allocate a temporary drive for conversion. */
-    temp86 = (d86f_t *) malloc(sizeof(d86f_t));
+    temp86 = (d86f_t *) calloc(1, sizeof(d86f_t));
     memcpy(temp86, dev, sizeof(d86f_t));
 
     fwrite(&magic, 4, 1, fp);
@@ -3638,11 +3672,11 @@ d86f_load(int drive, char *fn)
 
     if (d86f_has_surface_desc(drive)) {
         for (uint8_t i = 0; i < 2; i++)
-            dev->track_surface_data[i] = (uint16_t *) malloc(53048 * sizeof(uint16_t));
+            dev->track_surface_data[i] = (uint16_t *) calloc(53048, sizeof(uint16_t));
 
         for (uint8_t i = 0; i < 2; i++) {
             for (uint8_t j = 0; j < 2; j++)
-                dev->thin_track_surface_data[i][j] = (uint16_t *) malloc(53048 * sizeof(uint16_t));
+                dev->thin_track_surface_data[i][j] = (uint16_t *) calloc(53048, sizeof(uint16_t));
         }
     }
 
@@ -3668,7 +3702,7 @@ d86f_load(int drive, char *fn)
 
     crc64 = 0xffffffffffffffff;
 
-    dev->filebuf = malloc(len);
+    dev->filebuf = calloc(1, len);
     fread(dev->filebuf, 1, len, dev->fp);
     *(uint64_t *) &(dev->filebuf[8]) = 0xffffffffffffffff;
     crc64                            = (uint64_t) crc64speed(0, dev->filebuf, len);
@@ -3707,8 +3741,8 @@ d86f_load(int drive, char *fn)
             fwrite(&temp, 1, 2, dev->fp);
         }
 
-        dev->filebuf = (uint8_t *) malloc(len);
-        dev->outbuf  = (uint8_t *) malloc(67108864);
+        dev->filebuf = (uint8_t *) calloc(1, len);
+        dev->outbuf  = (uint8_t *) calloc(1, 67108864);
         fread(dev->filebuf, 1, len, tf);
         temp = lzf_decompress(dev->filebuf, len, dev->outbuf, 67108864);
         if (temp) {
