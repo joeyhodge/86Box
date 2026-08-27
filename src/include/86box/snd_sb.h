@@ -205,6 +205,10 @@ typedef struct sb_t {
     uint16_t midi_addr;
     uint16_t gameport_addr;
 
+    /* Output gain required for the Pro Sonic 16 so PCM sounds are volume adjusted
+	to similar levels produced by the external midi and PC speaker */
+    double mvd_1216_output_gain;
+
     uint8_t  ess_scr_locked;
     uint8_t  es1688_rsk_enable;
     uint8_t  ess_readseq_state;
@@ -276,6 +280,7 @@ extern void sb_speed_changed(void *priv);
 
 extern void ess_mixer_reset(sb_t *ess);
 extern void ess_rsk_reset(void *priv);
+extern void ess_mixer_write(uint16_t addr, uint8_t val, void *priv);
 
 extern void sb_get_buffer_ess(int32_t *buffer, uint16_t len, void *priv);
 extern void sb_get_music_buffer_ess(int32_t *buffer, uint16_t len, void *priv);

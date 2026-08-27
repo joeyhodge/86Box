@@ -232,6 +232,8 @@ int      color_scheme = 0;                                        /* (C) Color s
 int      fdd_sounds_enabled = 1;                                  /* (C) Floppy drive sounds enabled */
 int      is_new_808x = 0;                                         /* (C) Use the new 808x code. */
 
+int      gdbstub_port = 12345;                                    /* (C) The GDB stub port. */
+
 // Accelerator key array
 struct accelKey acc_keys[NUM_ACCELS];
 
@@ -285,12 +287,12 @@ struct accelKey def_acc_keys[NUM_ACCELS] = {
     {
         .name="release_mouse",
         .desc="Release mouse pointer",
-        .seq="Ctrl+End"
+        .seq="Ctrl+Alt+G"
     },
     {
         .name="hard_reset",
         .desc="Hard reset",
-        .seq="Ctrl+Alt+F12"
+        .seq="Ctrl+Shift+F12"
     },
     {
         .name="pause",
@@ -306,6 +308,11 @@ struct accelKey def_acc_keys[NUM_ACCELS] = {
         .name="force_interpretation",
         .desc="Force interpretation",
         .seq="Ctrl+Alt+I"
+    },
+    {
+        .name="nmi",
+        .desc="Non-maskable interrupt",
+        .seq=""
     },
     {
         .name="toggle_osd",
