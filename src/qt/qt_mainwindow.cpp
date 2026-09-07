@@ -217,6 +217,9 @@ MainWindow::MainWindow(QWidget *parent)
     main_window = this;
     ui->setupUi(this);
     status->setSoundMenu(ui->menuSound);
+    dynarecMenu = new QMenu(this);
+    dynarecMenu->addAction(ui->actionForce_interpretation);
+    status->setDynarecMenu(dynarecMenu);
     ui->actionMute_Unmute->setText(sound_muted ? tr("&Unmute") : tr("&Mute"));
     ui->stackedWidget->setMouseTracking(true);
     statusBar()->setVisible(!hide_status_bar);
@@ -1158,7 +1161,16 @@ MainWindow::updateShortcuts()
 void
 MainWindow::updateMouseStrings()
 {
-    mouseStringCaptured = tr(mouse_get_buttons() > 2 ? "Press %1 to release mouse" : "Press %1 or middle button to release mouse").arg(QKeySequence(acc_keys[FindAccelerator("release_mouse")].seq, QKeySequence::PortableText).toString(QKeySequence::NativeText));
+    const int     release_buttons = mouse_get_release_buttons();
+    const QString seq             = QKeySequence(acc_keys[FindAccelerator("release_mouse")].seq, QKeySequence::PortableText).toString(QKeySequence::NativeText);
+
+    if (release_buttons & MOUSE_RELEASE_MIDDLE)
+        mouseStringCaptured = tr("Press %1 or middle button to release mouse").arg(seq);
+    else if (release_buttons & MOUSE_RELEASE_THUMB)
+        mouseStringCaptured = tr("Press %1 or thumb button to release mouse").arg(seq);
+    else
+        mouseStringCaptured = tr("Press %1 to release mouse").arg(seq);
+
     mouseStringUncaptured = tr("Click to capture mouse");
 }
 
@@ -1698,7 +1710,8 @@ MainWindow::eventFilter(QObject *receiver, QEvent *event)
         // because it's not a menu accelerator.
         QKeyEvent *ke = (QKeyEvent *) event;
         if (mouse_capture) {
-            if ((QKeySequence) (ke->key() | (ke->modifiers() & ~Qt::KeypadModifier)) == FindAcceleratorSeq("release_mouse") || (QKeySequence) (ke->key() | ke->modifiers()) == FindAcceleratorSeq("release_mouse")) {
+            if ((QKeySequence) (ke->key() | (ke->modifiers() & ~Qt::KeypadModifier)) == FindAcceleratorSeq("release_mouse")
+                || (QKeySequence) (ke->key() | ke->modifiers()) == FindAcceleratorSeq("release_mouse")) {
                 /* Prevent an Alt-based shortcut from looking like a standalone
                  * Alt press to the guest when the held modifiers are released. */
                 this->keyReleaseEvent(ke);
@@ -1837,6 +1850,7 @@ MainWindow::refreshMediaMenu()
 {
     mm->refresh(ui->menuMedia);
     status->setSoundMenu(ui->menuSound);
+    status->setDynarecMenu(dynarecMenu);
     status->refresh(ui->statusbar);
     ui->actionMCA_devices->setVisible(machine_has_bus(machine, MACHINE_BUS_MCA));
     if (acpi_enabled) {

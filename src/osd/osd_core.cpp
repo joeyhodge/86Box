@@ -76,7 +76,8 @@ enum OsdView {
     VIEW_FILE_RDISK,
     VIEW_FILE_CART,
     VIEW_FILE_MO,
-    VIEW_CD_FOLDER
+    VIEW_CD_FOLDER,
+    VIEW_MEDIA_TYPE
 };
 
 static OsdView   current_view   = VIEW_MENU;
@@ -219,7 +220,7 @@ static const char *const floppy_exts[] = {
 
 /* .ccd/.nrg/.mdf not supported by backend; .mdx is encrypted MDS. */
 static const char *const cd_exts[] = {
-    ".iso", ".cue", ".toc", ".ccd", ".mds", ".mdx", nullptr
+    ".iso", ".cue", ".toc", ".ccd", ".mds", ".mdx", ".aaruf", ".aaruformat", ".aif", nullptr
 };
 
 static const char *const rdisk_exts[] = {
@@ -246,6 +247,63 @@ static const char *const *exts_for_view(OsdView v)
         case VIEW_FILE_CART:   return cart_exts;
         case VIEW_FILE_MO:     return mo_exts;
         default:               return nullptr;
+    }
+}
+
+/* Last path mounted from each view */
+static char osd_last_mount[VIEW_MEDIA_TYPE][OSD_PATH_CAPACITY];
+
+/* Strip the wp:// write protection marker and check the path suits the view */
+static char *usable_path(OsdView view, char *path)
+{
+    if (path == nullptr)
+        return nullptr;
+
+    if (strstr(path, "wp://") == path)
+        path += 5;
+
+    /* Check if we are on a file (image) or directory (VISO folder) */
+    const bool suits = (view == VIEW_CD_FOLDER) ? plat_dir_check(path) : plat_file_check(path);
+
+    return suits ? path : nullptr;
+}
+
+/* Get image path from current mount, last mount in view or history */
+template <size_t entries>
+static char *
+last_known_path(OsdView view, char *mounted, char *(&history)[entries])
+{
+    char *candidates[] = { mounted, osd_last_mount[view] };
+
+    for (char *candidate : candidates)
+        if ((candidate = usable_path(view, candidate)) != nullptr)
+            return candidate;
+
+    /* Slots run newest first and can have gaps, so take the first usable one */
+    for (char *entry : history)
+        if ((entry = usable_path(view, entry)) != nullptr)
+            return entry;
+
+    return nullptr;
+}
+
+static const char *
+browser_initial_path(OsdView view)
+{
+    switch (view) {
+        case VIEW_FILE_FLOPPY:
+            return last_known_path(view, floppyfns[0], fdd_image_history[0]);
+        case VIEW_FILE_CD:
+        case VIEW_CD_FOLDER:
+            return last_known_path(view, cdrom[0].image_path, cdrom[0].image_history);
+        case VIEW_FILE_RDISK:
+            return last_known_path(view, rdisk_drives[0].image_path, rdisk_drives[0].image_history);
+        case VIEW_FILE_CART:
+            return last_known_path(view, cart_fns[0], cart_image_history[0]);
+        case VIEW_FILE_MO:
+            return last_known_path(view, mo_drives[0].image_path, mo_drives[0].image_history);
+        default:
+            return nullptr;
     }
 }
 
@@ -485,7 +543,7 @@ open_browser(OsdView view)
     explorer_config.accept_label    = view_accept_label(view);
     explorer_config.mode            = (view == VIEW_CD_FOLDER) ? OsdExplorerMode::Directory : OsdExplorerMode::File;
     explorer_config.extension_globs = exts_for_view(view);
-    explorer_config.initial_path    = nullptr;
+    explorer_config.initial_path    = browser_initial_path(view);
 
     explorer.Open(explorer_config);
     current_view = view;
@@ -683,6 +741,10 @@ static bool draw_browser(void)
 {
     OsdExplorerResult result = explorer.Draw();
     if (result.type == OsdExplorerResultType::Accepted) {
+        /* Record selected path in osd_last_mount for next run. */
+        snprintf(osd_last_mount[current_view], OSD_PATH_CAPACITY, "%s", result.path.data());
+
+        /* Mount the image/folder and proceed. */
         mount_path(result.path.data());
         current_view       = VIEW_LOG;
         log_scroll_pending = true;
