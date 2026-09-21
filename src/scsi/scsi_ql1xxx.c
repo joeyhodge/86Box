@@ -4150,13 +4150,16 @@ static void ql_init_scsi(ql_t *dev) {
 
         default:
             /* Should not happen */
+            dev->max_bus_count = 1;
             assert(false);
             break;
     }
 
-    for (uint32_t path_id = 0; path_id < dev->max_bus_count; path_id++) {
-        dev->scsi_bus[path_id] = scsi_get_bus();
-        scsi_bus_set_speed(dev->scsi_bus[path_id], dev->xfer_rate_bps);
+    if (dev->max_bus_count <= QL_MAX_PATHS) {
+        for (uint8_t path_id = 0; path_id < dev->max_bus_count; path_id++) {
+            dev->scsi_bus[path_id] = scsi_get_bus();
+            scsi_bus_set_speed(dev->scsi_bus[path_id], dev->xfer_rate_bps);
+        }
     }
 
     timer_add(&dev->cmd_timer, ql_sxp_timer_callback, dev, 0);
