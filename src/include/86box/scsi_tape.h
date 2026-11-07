@@ -40,8 +40,8 @@ enum {
 #define TAPE_DRIVE_TYPE_ATAPI      TAPE_BUS_ATAPI
 #define TAPE_DRIVE_TYPE_SCSI       TAPE_BUS_SCSI
 #define TAPE_DRIVE_TYPE_FDC        TAPE_BUS_FDC
-#define TAPE_DRIVE_TYPE_SCSI_ATAPI -2
-#define TAPE_DRIVE_TYPE_NONE       -1
+#define TAPE_DRIVE_TYPE_SCSI_ATAPI (-2)
+#define TAPE_DRIVE_TYPE_NONE       (-1)
 
 /* Tape media type definitions. */
 typedef struct tape_type_t {
@@ -51,28 +51,44 @@ typedef struct tape_type_t {
     uint8_t     density_code;
 } tape_type_t;
 
+// TODO: Find other tape types
 #define KNOWN_TAPE_TYPES 20
 static const tape_type_t tape_types[KNOWN_TAPE_TYPES] = {
-    { "QIC-150",    157286400ULL, 512, 0x10 },
-    { "QIC-525",    549978112ULL, 512, 0x11 },
-    { "QIC-1000",  1073741824ULL, 512, 0x12 },
-    { "DDS-3",    12000000000ULL, 512, 0x25 },
-    { "DDS-4",    20000000000ULL, 512, 0x26 },
-    { "DAT-72",   36000000000ULL, 512, 0x47 },
-    { "DDS-2",     4000000000ULL, 512, 0x24 },
-    { "Ditto 2 GB",              1184366592ULL, 512, 0 },
-    { "Ditto 3 GB",              1776549888ULL, 512, 0 },
-    { "Ditto 5 GB",              2963275776ULL, 512, 0 },
-    { "Ditto Max 7 GB",          4147642368ULL, 512, 0 },
-    { "QIC-80, DC-2080 (205 ft)",  91750400ULL, 512, 0 },
-    { "QIC-80, DC-2120 (307.5 ft)",137625600ULL, 512, 0 },
-    { "QIC-80, 425 ft",           189923328ULL, 512, 0 },
-    { "QIC-80, 1100 ft",          492699648ULL, 512, 0 },
-    { "QIC-3010 (255 MB)",        281804800ULL, 512, 0 },
-    { "QIC-3020 (500 MB)",        553123840ULL, 512, 0 },
-    { "Travan TR-1 (400 MB)",     431751168ULL, 512, 0 },
-    { "Travan TR-2 (800 MB)",     707788800ULL, 512, 0 },
-    { "Travan TR-3 (1.6 GB)",    1389363200ULL, 512, 0 },
+    { "QIC-150",                      157286400ULL, 512, 0x10 },
+    { "QIC-525",                      549978112ULL, 512, 0x11 },
+    { "QIC-1000",                    1073741824ULL, 512, 0x12 },
+    { "DDS-3",                      12000000000ULL, 512, 0x25 },
+    { "DDS-4",                      20000000000ULL, 512, 0x26 },
+    { "DAT-72",                     36000000000ULL, 512, 0x47 },
+    { "DDS-2",                       4000000000ULL, 512, 0x24 },
+    { "Ditto 2 GB",                  1184366592ULL, 512, 0    },
+    { "Ditto 3 GB",                  1776549888ULL, 512, 0    }, // Max
+#if 0
+    // Not yet checked/correct
+    { "Ditto 3.7 GB",                2368733184ULL, 512, 0    },
+#endif
+    { "Ditto 5 GB",                  2963275776ULL, 512, 0    }, // Max
+    { "Ditto Max 7 GB",              4147642368ULL, 512, 0    },
+#if 0
+    // Not yet checked/correct
+    { "Ditto Max 10 GB",             5921832960ULL, 512, 0    },
+#endif
+    { "QIC-80, DC-2080 (205 ft)",      91750400ULL, 512, 0    },
+    { "QIC-80, DC-2120 (307.5 ft)",   137625600ULL, 512, 0    },
+    { "QIC-80, 425 ft",               189923328ULL, 512, 0    },
+    { "QIC-80, 1100 ft",              492699648ULL, 512, 0    },
+// QIC-3000
+    { "QIC-3010 (255 MB)",            281804800ULL, 512, 0    },
+    { "QIC-3020 (500 MB)",            553123840ULL, 512, 0    },
+    { "Travan TR-1 (400 MB)",         431751168ULL, 512, 0    },
+    { "Travan TR-2 (800 MB)",         707788800ULL, 512, 0    },
+    { "Travan TR-3 (1.6 GB)",        1389363200ULL, 512, 0    },
+#if 0
+    // Not yet checked/correct
+    { "Travan TR-4 (4 GB)",          4000000000ULL, 512, 0    },
+    { "Travan TR-5 / NS20 (10 GB)", 10000000000ULL, 512, 0    },
+    { "Travan TR-7 (20 GB)",        20000000000ULL, 512, 0    },
+#endif
 };
 
 /* Tape drive type definitions. */
@@ -85,7 +101,7 @@ typedef struct tape_drive_type_t {
     int8_t      supported_media[KNOWN_TAPE_TYPES];
 } tape_drive_type_t;
 
-#define KNOWN_TAPE_DRIVE_TYPES 8
+#define KNOWN_TAPE_DRIVE_TYPES 9
 static const tape_drive_type_t tape_drive_types[KNOWN_TAPE_DRIVE_TYPES] = {
     { "86BOX",   "TAPE",             "1.00", 0, TAPE_DRIVE_TYPE_SCSI_ATAPI, { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 } },
     { "ARCHIVE", "VIPER 150 21247",  "2.10", 0, TAPE_DRIVE_TYPE_SCSI_ATAPI, { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
@@ -95,6 +111,20 @@ static const tape_drive_type_t tape_drive_types[KNOWN_TAPE_DRIVE_TYPES] = {
     { "Iomega",  "Ditto 2GB",        "",     7, TAPE_DRIVE_TYPE_LPT,        { 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 } },
     { "Iomega",  "Ditto Max",        "",    10, TAPE_DRIVE_TYPE_LPT,        { 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 } },
     { "Iomega",  "QIC-3020",         "",    15, TAPE_DRIVE_TYPE_LPT,        { 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 } },
+    /* The real Sun StorEdge DDS-4 tape drive is an OEM'd HP C5683A mechanism -
+       Sun rebadged the case/part number but not the drive's own SCSI identity,
+       so "HP"/"C5683A" (not "SUN") is what it genuinely reports via INQUIRY.
+       Confirmed via illumos's st_conf.c device-matching table and HP's own
+       "hp dds drives technical reference manual, volume 5: unix configuration
+       guide" (Edition 9, 2003), which quotes Sun's own st.conf tape-config-list
+       entry ("HP      C5683A") verbatim and states the LUN 0 Product ID is
+       exactly "C5683A". Firmware revision "9905" is an unconfirmed placeholder
+       in HP's real YYWW-style revision format (confirmed by that same manual's
+       "firmware revision 9503 or later" example for a sibling autoloader), not
+       a confirmed real C5683A revision string. Supports DDS-2/DDS-3 media in
+       addition to native DDS-4, per standard one-generation-back DDS
+       compatibility (same pattern as the existing DAT-72 entry above). */
+    { "HP",      "C5683A",           "9905", 4, TAPE_DRIVE_TYPE_SCSI_ATAPI, { 0, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
 };
 
 typedef struct tape_drive_t {
